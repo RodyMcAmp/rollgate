@@ -1,0 +1,5 @@
+rollgate \r (\l)
+
+Log in as root. If you haven't set a root password yet, set one now: passwd
+Recovery steps: docs/runbooks/recovery.md (keep a printed copy with the router)
+

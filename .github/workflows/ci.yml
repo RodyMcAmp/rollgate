@@ -1,0 +1,46 @@
+# CI is the source of truth (docs/testing.md): L0 on every push and PR, then build the
+# image and run the L3 boot test.
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    name: L0 checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # ubuntu-latest ships shellcheck and Python 3.11+ (tomllib).
+      - run: make check
+
+  image:
+    name: Build image + L3 boot test
+    needs: check
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+      # Loop devices for the filesystem images, /dev/kvm for QEMU.
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build tools
+        run: |
+          pacman-key --init
+          pacman-key --populate archlinux
+          pacman -Syu --noconfirm --needed make arch-install-scripts btrfs-progs \
+            dosfstools gptfdisk grub qemu-system-x86 edk2-ovmf openssh
+      - name: Build image
+        run: make image
+      - name: L3 boot test
+        run: make test-vm
+      - name: L3 rollback rehearsal
+        run: make test-rollback
+      - name: Keep serial logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: serial-logs
+          path: build/test-logs/
+          if-no-files-found: ignore

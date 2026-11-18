@@ -1,0 +1,115 @@
+# AGENTS.md
+
+Instructions for AI coding agents (Claude Code, Codex, Cursor, Copilot, Gemini, etc.)
+and for humans who want the short version. Read this whole file before changing anything.
+
+## What this project is
+
+**rollgate** (working name) is a home/small-office router and firewall OS built on
+**Arch Linux**. It is a pfSense-style appliance: one declarative config file
+(`router.toml`) is compiled into native Linux configs (systemd-networkd, nftables,
+dnsmasq, Unbound). Packages come from Arch's stable repos, pinned to a dated snapshot
+that has passed our test suite. Every update can be rolled back from the boot menu.
+
+Status: **M1 (bootable image) builds and passes the L3 boot test and rollback rehearsal
+locally** (WSL2, Arch snapshot 2026-11-16). CI hasn't run yet because the repo isn't on GitHub. Anything marked
+*(planned)* doesn't exist until the milestone in `docs/roadmap.md` delivers it.
+
+## Hard rules (never break these)
+
+1. **Stable packages only.** Use Arch `core` and `extra` only. Never enable
+   `core-testing`, `extra-testing`, or any other testing repo. Never install from the AUR
+   on the router. Anything not in the official repos gets a PKGBUILD in `packaging/` and
+   is built into our own signed repo. See `docs/decisions/0003`.
+2. **Never lock the user out.** Changes that can affect management access (firewall,
+   interfaces, SSH, web UI) must go through the commit-confirm apply path, which
+   reverts automatically if not confirmed. See `docs/architecture.md#safe-apply`.
+3. **One write path.** Only the compiler writes generated system config files. The web
+   UI, the CLI, and scripts edit `router.toml` and then call validate → compile → apply.
+   Never hand-edit or patch a generated file; fix the compiler instead.
+4. **Kernels live in `/boot` on the Btrfs root; GRUB's own files live on the ESP.** Each
+   snapshot must carry its own kernel, initramfs, and modules, or rollback breaks. GRUB's
+   directory (`/efi/grub`: `grub.cfg`, `grubenv`) must stay on the ESP, because GRUB
+   can't write `grubenv` on Btrfs. See `docs/decisions/0004` and `0009`.
+5. **WAN inbound is default-deny.** No config option may change that default. Port
+   forwards and explicit rules are the only way in.
+6. **No new daemon, language, or package source without an ADR.** Write
+   `docs/decisions/NNNN-*.md` first and get it accepted.
+7. **Don't re-argue accepted decisions** (Arch base, pinned snapshots, Go compiler,
+   etc.) unless you have new evidence. If you do, write a superseding ADR. Don't
+   silently work around one.
+8. **No secrets in git.** Keys and passwords live in `/etc/rollgate/secrets/` on the
+   device and are referenced by name from `router.toml`. Examples use placeholders.
+9. **Keep the user config dead simple.** Users are not assumed to be networking experts.
+   Every option needs a safe default. Prefer one high-level setting that does the right
+   thing (e.g. `ipv6 = "auto"`) over low-level knobs. Overrides go in the spec's Advanced
+   section with a stated real-world need. Never add a required option without an ADR.
+   See `docs/config-spec.md#design-principle-simple-by-default`.
+
+## Repository map
+
+| Path | What it is |
+|---|---|
+| `docs/architecture.md` | How the system fits together. Start here. |
+| `docs/config-spec.md` | The `router.toml` format. The contract between users and the compiler. |
+| `docs/build-and-release.md` | Image builds, the pinned-snapshot release train, updates. |
+| `docs/testing.md` | Test levels L0–L4 and which changes need which levels. |
+| `docs/decisions/` | Architecture Decision Records (ADRs). Why things are the way they are. |
+| `docs/runbooks/recovery.md` | Offline recovery steps. Must stay usable without internet. |
+| `docs/roadmap.md` | Milestones and what each one delivers. |
+| `docs/dev-setup.md` | Build host setup (WSL2 or native Arch) and how to boot a test image. |
+| `examples/router.toml` | A complete example config. Keep it valid against the spec. |
+| `image/` | `build.sh` (the image build), `packages.txt`, `rootfs/` overlay, `snapshot-date`. |
+| `tests/vm/` | L3 QEMU boot test. `golden/` and `netns/` arrive in M2. |
+| `compiler/` *(planned, M2)* | Go source for the `rollgate` CLI: validate, compile, diff, apply. |
+| `packaging/` *(planned)* | PKGBUILDs for our own packages (e.g. `rollgate` itself). |
+
+## Commands
+
+Run `image` and `test-vm` on an Arch host as root (or with sudo); see `docs/dev-setup.md`.
+
+| Command | Does |
+|---|---|
+| `make check` | L0 (L1 too from M2): shellcheck, example config checks. Run before every commit. |
+| `make image` | Builds `build/rollgate-<date>.img` at the date in `image/snapshot-date`. |
+| `make test-vm` | L3: boots the image in QEMU under UEFI with both kernels and checks for a clean boot. More end-to-end checks are added in M2. |
+| `make test-rollback` | L3: rollback rehearsal. Bad update → boot the pre-update snapshot from the GRUB menu → `rollgate-snapshot-rollback` → restored system boots. Follows `docs/runbooks/recovery.md`; keep the two in sync. |
+| `make test-netns` *(planned, M2)* | L2: applies generated nftables/networkd configs in network namespaces (needs root). |
+| `make test-update` *(planned, M4)* | L4: installs the previous release, updates to this one, forces a failure, verifies rollback. |
+
+## How to make a change
+
+1. Find or create an issue that states the goal and the acceptance criteria.
+2. Read the docs it touches. For anything decision-sized, write an ADR first.
+3. If the change affects the config format, update `docs/config-spec.md` and
+   `examples/router.toml` **before** writing code.
+4. Keep PRs small (aim for under ~400 changed lines, excluding golden files).
+5. Add or update tests at the levels `docs/testing.md` requires for that area.
+6. Run `make check` (and higher levels when required). CI must pass.
+7. Fill in the PR template, including which agent or model wrote the change.
+
+## Safety-critical paths
+
+Changes here need a human reviewer, even if an AI wrote and tested them:
+nftables generation, the apply/confirm/revert logic, the update and rollback tooling,
+boot and GRUB configuration, and anything that touches management access.
+
+## Style
+
+- Go: `gofmt`, `go vet`, `staticcheck`. Errors are returned, not logged and ignored.
+  Generated configs come from `text/template` files in `compiler/templates/`, not from
+  string concatenation.
+- Generated files start with a header comment naming the generator and the source config.
+- Docs: plain Markdown, one sentence per line is fine, no HTML. Mark unimplemented
+  things *(planned)*. Never describe a feature as working before it has tests.
+
+## Glossary
+
+- **Release / snapshot date**: a date such as `2026-11-15`. The router installs packages
+  from the Arch Linux Archive as they were on that date. A date that has passed CI is a release.
+- **Generation**: one compiled set of system config files, stored so it can be restored.
+- **Commit-confirm**: apply a change, then revert automatically unless it is confirmed
+  over a fresh connection within the timeout.
+- **Trial boot**: booting an updated snapshot once. It becomes the default only after
+  health checks pass.
+- **Zone**: a named group of interfaces (e.g. `wan`, `lan`, `iot`) that firewall policy refers to.

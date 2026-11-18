@@ -1,0 +1,14 @@
+[Unit]
+# Don't put the report's marker text in this description: systemd echoes it to the
+# console, and the boot test would mistake it for the report.
+Description=rollgate boot report
+
+[Service]
+# simple, not oneshot: the script waits for boot to finish, and a oneshot unit would be
+# part of the boot it is waiting for.
+Type=simple
+ExecStart=/usr/local/lib/rollgate/boot-report
+StandardOutput=journal+console
+
+[Install]
+WantedBy=multi-user.target

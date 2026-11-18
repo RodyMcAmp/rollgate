@@ -1,0 +1,9 @@
+#!/bin/sh
+# Prints one line on the console once boot has finished. The L3 boot test
+# (tests/vm/boot-test.sh) parses it; humans at the console can read it too.
+#   ROLLGATE_BOOT state=<running|degraded|...> kernel=<uname -r> failed=<unit,unit,...>
+# Replaced by the health checks (/usr/lib/rollgate/health.d) in M4.
+
+state=$(systemctl is-system-running --wait)
+failed=$(systemctl list-units --failed --plain --no-legend | awk '{print $1}' | paste -sd, -)
+echo "ROLLGATE_BOOT state=$state kernel=$(uname -r) failed=$failed"

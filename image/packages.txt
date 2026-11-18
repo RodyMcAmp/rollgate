@@ -1,0 +1,33 @@
+# Packages installed into the rollgate image, from the pinned Arch Linux Archive date.
+# Stable repos (core, extra) only: see ADR 0003. One package per line; comments allowed.
+# Adding a package that runs a daemon needs an ADR.
+
+# Base system and kernels (linux = latest stable, linux-lts = fallback; ADR 0004)
+base
+mkinitcpio
+linux
+linux-lts
+amd-ucode
+intel-ucode
+linux-firmware-intel
+linux-firmware-realtek
+
+# Boot, filesystems, snapshots (ADR 0004)
+btrfs-progs
+dosfstools
+grub
+efibootmgr
+grub-btrfs
+inotify-tools
+snapper
+snap-pac
+
+# Networking (ADR 0006). dnsmasq and unbound arrive with the compiler in M2.
+nftables
+openssh
+
+# Console troubleshooting (docs/runbooks/recovery.md)
+ethtool
+tcpdump
+less
+nano

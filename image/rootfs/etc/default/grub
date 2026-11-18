@@ -1,0 +1,16 @@
+# rollgate GRUB defaults (ADR 0004, 0009). grub.cfg is generated to /efi/grub/grub.cfg.
+GRUB_DEFAULT=0
+GRUB_TIMEOUT=5
+GRUB_DISTRIBUTOR="rollgate"
+GRUB_CMDLINE_LINUX_DEFAULT="loglevel=4"
+# Serial console last, so it becomes /dev/console (headless boxes, the L3 boot test).
+GRUB_CMDLINE_LINUX="console=tty0 console=ttyS0,115200"
+GRUB_PRELOAD_MODULES="part_gpt btrfs"
+GRUB_TERMINAL_INPUT="console serial"
+GRUB_TERMINAL_OUTPUT="console serial"
+GRUB_SERIAL_COMMAND="serial --unit=0 --speed=115200"
+# Flat menu: "rollgate Linux, with Linux linux" first, then linux-lts.
+GRUB_DISABLE_SUBMENU=y
+GRUB_TOP_LEVEL="/boot/vmlinuz-linux"
+GRUB_DISABLE_RECOVERY=true
+GRUB_DISABLE_OS_PROBER=true

@@ -1,0 +1,7 @@
+# M1 placeholder: every wired port asks for an address over DHCP so the image is
+# reachable for testing. Replaced by compiler output (WAN/LAN zones) in M2.
+[Match]
+Name=en*
+
+[Network]
+DHCP=yes

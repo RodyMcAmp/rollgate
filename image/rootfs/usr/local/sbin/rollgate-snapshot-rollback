@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Interim (M1–M3) system rollback. Replaced by `rollgate rollback` in M4.
+#
+# Usage: rollgate-snapshot-rollback <snapshot-number>     (numbers: `snapper list`)
+#
+# Makes snapshot N the system again: the current @ subvolume is renamed to
+# @broken-<timestamp> (kept for inspection; delete it later) and a writable copy of the
+# snapshot becomes the new @. Because /boot lives inside @, the kernel rolls back too.
+# Works when booted normally or when booted into a snapshot from the GRUB menu.
+# Reboot afterwards.
+set -euo pipefail
+
+die() { echo "rollgate-snapshot-rollback: $*" >&2; exit 1; }
+
+[[ $EUID -eq 0 ]] || die "must run as root"
+number=${1:-}
+[[ $number =~ ^[0-9]+$ ]] || die "usage: rollgate-snapshot-rollback <snapshot-number>  (see: snapper list)"
+
+# e.g. "/dev/sda2[/@snapshots]" -> "/dev/sda2"
+device=$(findmnt -no SOURCE /.snapshots | sed 's/\[.*//')
+[[ -b $device ]] || die "cannot find the Btrfs device behind /.snapshots"
+
+top=$(mktemp -d)
+trap 'umount "$top" 2>/dev/null || true; rmdir "$top"' EXIT
+mount -o subvolid=5 "$device" "$top"
+
+source_snapshot="$top/@snapshots/$number/snapshot"
+[[ -d $source_snapshot ]] || die "snapshot $number not found (see: snapper list)"
+
+stamp=$(date +%Y%m%d-%H%M%S)
+mv "$top/@" "$top/@broken-$stamp"
+if ! btrfs subvolume snapshot "$source_snapshot" "$top/@" >/dev/null; then
+  mv "$top/@broken-$stamp" "$top/@"
+  die "could not create the new @; nothing was changed"
+fi
+
+echo "Rolled back to snapshot $number. The previous system is kept as @broken-$stamp."
+echo "Reboot now:  reboot"

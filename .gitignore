@@ -1,0 +1,3 @@
+/build/
+# Your SSH public key(s) for test images; never commit.
+/image/authorized_keys
