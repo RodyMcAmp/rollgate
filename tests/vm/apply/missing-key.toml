@@ -1,0 +1,16 @@
+# L3 apply test: names a key file that isn't in /etc/rollgate/secrets/, so
+# apply must refuse before changing anything.
+schema_version = 1
+
+[management]
+ssh_authorized_keys = ["admin.pub", "laptop.pub"]
+
+[[interface]]
+name = "wan"
+match_mac = "52:54:00:00:00:02"
+ipv4 = "dhcp"
+
+[[interface]]
+name = "lan"
+match_mac = "52:54:00:00:00:01"
+ipv4 = "10.0.2.15/24"

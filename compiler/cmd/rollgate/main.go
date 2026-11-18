@@ -8,9 +8,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/RodyMcAmp/rollgate/compiler/apply"
@@ -155,6 +157,10 @@ func change(name string, f func(apply.System) error, stdout, stderr io.Writer) i
 		fmt.Fprintf(stderr, "rollgate %s: must run as root\n", name)
 		return 1
 	}
+	// A change often cuts the SSH connection it was started from. Finish it
+	// anyway: ignore the hangup, and let writes to the dead terminal fail
+	// instead of killing the process mid-install.
+	signal.Ignore(syscall.SIGHUP, syscall.SIGPIPE)
 	if err := f(system(stdout)); err != nil {
 		fmt.Fprintf(stderr, "rollgate %s: %v\n", name, err)
 		return 1

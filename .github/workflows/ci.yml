@@ -62,6 +62,8 @@ jobs:
         run: make image
       - name: L3 boot test
         run: make test-vm
+      - name: L3 apply test
+        run: make test-apply
       - name: L3 rollback rehearsal
         run: make test-rollback
       - name: Keep serial logs

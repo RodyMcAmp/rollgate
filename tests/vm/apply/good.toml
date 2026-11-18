@@ -1,0 +1,28 @@
+# L3 apply test (tests/vm/apply-test.sh): a working config for the test VM.
+# lan is QEMU's first user-mode network (the host reaches SSH through it, from
+# 10.0.2.2); wan is the second (10.0.3.0/24, with QEMU's DHCP server).
+schema_version = 1
+
+[management]
+allowed_zones = ["lan"]
+ssh_authorized_keys = ["admin.pub"]
+confirm_timeout_seconds = 30
+
+[[interface]]
+name = "wan"
+match_mac = "52:54:00:00:00:02"
+ipv4 = "dhcp"
+
+[[interface]]
+name = "lan"
+match_mac = "52:54:00:00:00:01"
+ipv4 = "10.0.2.15/24"
+
+[[vlan]]
+name = "iot"
+parent = "lan"
+id = 20
+ipv4 = "192.168.20.1/24"
+
+[dhcp.iot]
+range = ["192.168.20.100", "192.168.20.199"]
