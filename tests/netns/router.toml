@@ -2,6 +2,9 @@
 # veth interfaces the test creates in the router namespace.
 schema_version = 1
 
+[management]
+ssh_authorized_keys = ["admin.pub"]   # run.sh points sshd at a throwaway key
+
 [[interface]]
 name = "wan"
 match_device = "wan"

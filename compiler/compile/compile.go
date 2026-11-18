@@ -123,6 +123,14 @@ func Compile(c *config.Config, source []byte, sourceName string) (Files, error) 
 	if err := add("etc/unbound/unbound.conf", "unbound.tmpl", buildUnbound(c, header)); err != nil {
 		return nil, err
 	}
+	// Same path as the M1 image's placeholder, which this file replaces.
+	sshd := struct {
+		Header string
+		Keys   []string // secret names, validated to be plain file names
+	}{header, c.Management.SSHAuthorizedKeys}
+	if err := add("etc/ssh/sshd_config.d/10-rollgate.conf", "sshd.tmpl", sshd); err != nil {
+		return nil, err
+	}
 	return files, nil
 }
 

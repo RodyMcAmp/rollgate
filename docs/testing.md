@@ -40,7 +40,7 @@ An agent's claim that something works is not evidence. A passing test in CI is.
 "internet"             └──────veth── [rg-iot]
 ```
 
-`tests/netns/router.toml` is compiled, the generated nftables ruleset and sysctl settings are loaded into `rg-router`, and dnsmasq runs there with the generated config (after `dnsmasq --test` and `unbound-checkconf` accept the generated files).
+`tests/netns/router.toml` is compiled, the generated nftables ruleset and sysctl settings are loaded into `rg-router`, and dnsmasq and sshd run there with their generated configs (after `dnsmasq --test`, `unbound-checkconf` and `sshd -T` accept the generated files). SSH checks log in with a throwaway key; only its file location is overridden.
 Interface addresses are set by the script, standing in for networkd (L3 covers networkd itself from M3); the LAN addresses are read from the compiled `.network` files.
 Each check is a real TCP connection (bash's `/dev/tcp` as the client, `tests/netns/listen.go` as the server) with an expected outcome, open or blocked, over IPv4 and IPv6.
 The NAT check reads which address connections arrived from. DHCP and DNS checks use `tests/netns/probe.go`, which gets a real lease (discover, offer, request, ack) and looks up local names.

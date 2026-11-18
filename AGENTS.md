@@ -65,7 +65,7 @@ with M2 (the config compiler). Anything marked
 | `tests/vm/` | L3 QEMU boot test and rollback rehearsal. |
 | `tests/golden/` | L1 golden tests: each `<case>/router.toml` and the exact files it must compile to. |
 | `tests/netns/` | L2 namespace test: `run.sh`, its `router.toml`, a TCP listener and a DHCP/DNS probe. |
-| `compiler/` | Go source for the `rollgate` CLI (M2, in progress): `validate`, `compile` (networkd, sysctl, nftables, dnsmasq, Unbound so far) and `diff` work; `apply` is *(planned)*. Templates are in `compiler/templates/`. |
+| `compiler/` | Go source for the `rollgate` CLI (M2, in progress): `validate`, `compile` (networkd, sysctl, nftables, dnsmasq, Unbound, sshd), `diff` and `schema` work; `apply` is *(planned)*. Templates are in `compiler/templates/`. |
 | `packaging/` *(planned)* | PKGBUILDs for our own packages (e.g. `rollgate` itself). |
 
 ## Commands
@@ -80,7 +80,7 @@ Run `image` and `test-vm` on an Arch host as root (or with sudo); see `docs/dev-
 | `make image` | Builds `build/rollgate-<date>.img` at the date in `image/snapshot-date`. |
 | `make test-vm` | L3: boots the image in QEMU under UEFI with both kernels and checks for a clean boot. More end-to-end checks are added in M2. |
 | `make test-rollback` | L3: rollback rehearsal. Bad update → boot the pre-update snapshot from the GRUB menu → `rollgate-snapshot-rollback` → restored system boots. Follows `docs/runbooks/recovery.md`; keep the two in sync. |
-| `make test-netns` | L2: loads the generated firewall, sysctl settings and dnsmasq config into network namespaces and checks real traffic: firewall policy, NAT, port forwards, DHCP and local DNS (needs root). |
+| `make test-netns` | L2: loads the generated firewall and sysctl settings into network namespaces, runs dnsmasq and sshd with their generated configs, and checks real traffic: firewall policy, NAT, port forwards, DHCP, local DNS and SSH logins (needs root). |
 | `make test-update` *(planned, M4)* | L4: installs the previous release, updates to this one, forces a failure, verifies rollback. |
 
 ## How to make a change
