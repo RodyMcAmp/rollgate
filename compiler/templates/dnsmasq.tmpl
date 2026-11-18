@@ -1,0 +1,42 @@
+{{.Header}}
+#
+# DHCPv4 and local names for the interfaces with a [dhcp.<name>] section
+# (ADR 0006). All other names are resolved by Unbound on 127.0.0.1#5335.
+# IPv6 addresses and router advertisements are networkd's job, not dnsmasq's.
+
+# DNS
+port=53
+no-resolv
+no-hosts
+server=127.0.0.1#5335
+# Never forward plain names or private reverse lookups to the internet.
+domain-needed
+bogus-priv
+domain={{.Domain}}
+local=/{{.Domain}}/
+{{- range .Services}}
+interface={{.Device}}
+{{- else}}
+# No [dhcp.<name>] sections: listen on loopback only. (With no interface= line,
+# dnsmasq would listen everywhere, WAN included.)
+interface=lo
+{{- end}}
+bind-dynamic
+# The router's own name resolves to its address on the asking client's network.
+localise-queries
+{{- range .Services}}
+interface-name={{$.Hostname}}.{{$.Domain}},{{.Device}}/4
+{{- end}}
+
+# DHCP
+dhcp-authoritative
+{{- range .Services}}
+
+# {{.Kind}} "{{.Name}}"
+dhcp-range=set:{{.Name}},{{.Start}},{{.End}},{{.Netmask}},{{.LeaseTime}}
+dhcp-option=tag:{{.Name}},option:router,{{.Router}}
+dhcp-option=tag:{{.Name}},option:dns-server,{{.Router}}
+{{- range .Static}}
+dhcp-host={{.MAC}},{{.Addr}},{{.Hostname}}
+{{- end}}
+{{- end}}

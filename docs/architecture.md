@@ -29,8 +29,8 @@ That keeps mistakes in our code to the config layer, where tests can catch them.
 | Interfaces, VLANs, bridges, WAN DHCPv4 client | systemd-networkd | `/etc/systemd/network/*.network`, `*.netdev` | ADR 0006 |
 | All IPv6: prefix delegation, local ULA prefix, router advertisements | systemd-networkd | same files | ADR 0006, 0008 |
 | Firewall, NAT, port forwards (IPv4 + IPv6 in one ruleset) | nftables | `/etc/nftables.conf` | ADR 0006 |
-| LAN DHCPv4, local hostnames | dnsmasq | `/etc/dnsmasq.d/rollgate.conf` | ADR 0006 |
-| Recursive DNS, DNSSEC, blocklists | Unbound | `/etc/unbound/unbound.conf.d/rollgate.conf` | ADR 0006 |
+| LAN DHCPv4, local hostnames | dnsmasq | `/etc/dnsmasq.conf` (the main file: Arch's default doesn't read a drop-in directory) | ADR 0006 |
+| Recursive DNS, DNSSEC, blocklists | Unbound | `/etc/unbound/unbound.conf` (the main file, for the same reason) | ADR 0006 |
 | Kernel networking settings | sysctl | `/etc/sysctl.d/90-rollgate.conf` | — |
 | Management access | OpenSSH | `/etc/ssh/sshd_config.d/rollgate.conf` | — |
 | Config compiler and CLI | rollgate (Go) | — | ADR 0005 |

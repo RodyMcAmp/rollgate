@@ -128,7 +128,9 @@ func TestProblems(t *testing.T) {
 
 		{"forward without forwarders", base + "[dns]\nmode = \"forward\"\n", []string{"E010 dns.forwarders"}},
 		{"forwarders when recursive", base + "[dns]\nforwarders = [\"9.9.9.9\"]\n", []string{"E009 dns.forwarders"}},
-		{"DNS over TLS forwarder", base + "[dns]\nmode = \"forward\"\nforwarders = [\"9.9.9.9@853#dns.quad9.net\", \"2620:fe::fe\"]\n", nil},
+		{"DNS over TLS forwarders", base + "[dns]\nmode = \"forward\"\nforwarders = [\"9.9.9.9@853#dns.quad9.net\", \"2620:fe::fe@853#dns.quad9.net\"]\n", nil},
+		{"plain forwarders", base + "[dns]\nmode = \"forward\"\nforwarders = [\"9.9.9.9\", \"1.1.1.1@53\"]\n", nil},
+		{"TLS and plain mixed", base + "[dns]\nmode = \"forward\"\nforwarders = [\"9.9.9.9@853#dns.quad9.net\", \"2620:fe::fe\"]\n", []string{"E009 dns.forwarders"}},
 		{"bad forwarder", base + "[dns]\nmode = \"forward\"\nforwarders = [\"dns.quad9.net\"]\n", []string{"E009 dns.forwarders"}},
 		{"blocklists not yet", base + "[dns]\nblocklists = [\"https://example.com/list\"]\n", []string{"E009 dns.blocklists"}},
 
