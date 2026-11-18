@@ -66,7 +66,7 @@ router.toml ──validate──▶ typed config ──compile──▶ staging 
    Examples: subnets don't overlap, every zone a rule refers to exists, DHCP ranges sit inside their interface subnet, and management stays reachable from at least one LAN zone.
 2. **compile**: a pure function from the typed config to a set of files in a staging directory.
    It has no side effects, so the golden tests can cover it completely.
-3. **diff**: show what would change compared with the live generation.
+3. **diff**: show what would change compared with the live generation (`rollgate diff`). Until M3 stores generations, it compares with the files installed on the system, and also lists rollgate's per-interface networkd files that the new config no longer produces.
 4. **apply**: see [Safe apply](#safe-apply).
 
 ### Generations

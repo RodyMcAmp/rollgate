@@ -64,7 +64,7 @@ with M2 (the config compiler). Anything marked
 | `tests/vm/` | L3 QEMU boot test and rollback rehearsal. |
 | `tests/golden/` | L1 golden tests: each `<case>/router.toml` and the exact files it must compile to. |
 | `tests/netns/` | L2 namespace test: `run.sh`, its `router.toml`, a TCP listener and a DHCP/DNS probe. |
-| `compiler/` | Go source for the `rollgate` CLI (M2, in progress): `validate` and `compile` work (networkd, sysctl, nftables, dnsmasq, Unbound so far); diff and apply are *(planned)*. Templates are in `compiler/templates/`. |
+| `compiler/` | Go source for the `rollgate` CLI (M2, in progress): `validate`, `compile` (networkd, sysctl, nftables, dnsmasq, Unbound so far) and `diff` work; `apply` is *(planned)*. Templates are in `compiler/templates/`. |
 | `packaging/` *(planned)* | PKGBUILDs for our own packages (e.g. `rollgate` itself). |
 
 ## Commands
