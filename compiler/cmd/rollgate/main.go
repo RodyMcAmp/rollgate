@@ -1,6 +1,5 @@
 // Command rollgate validates, compiles and applies router.toml.
-// See docs/architecture.md#config-flow. M2 delivered validate, compile, diff
-// and schema; apply is planned for M3.
+// See docs/architecture.md#config-flow and #safe-apply (ADR 0010).
 package main
 
 import (
@@ -10,7 +9,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 
+	"github.com/RodyMcAmp/rollgate/compiler/apply"
 	"github.com/RodyMcAmp/rollgate/compiler/compile"
 	"github.com/RodyMcAmp/rollgate/compiler/config"
 )
@@ -27,6 +28,13 @@ commands:
                            below DIR (default /); exit 0 no changes, 1 changes,
                            2 invalid config or error; changes nothing
   schema                   print the JSON Schema for router.toml
+
+changing the router (as root; docs/architecture.md#safe-apply):
+  apply [file]             check, install and load a config. It reverts by itself
+                           unless confirmed within management.confirm_timeout_seconds
+  confirm                  keep the applied config; run it from a NEW SSH connection
+                           (or the console), which proves SSH still works
+  revert                   undo an unconfirmed apply now
 `
 
 func main() {
@@ -66,6 +74,27 @@ func run(args []string, stdout, stderr io.Writer) int {
 		}
 		stdout.Write(s)
 		return 0
+	case "apply":
+		return applyCmd(args[1:], stdout, stderr)
+	case "confirm":
+		if len(args) > 1 {
+			fmt.Fprint(stderr, usage)
+			return 2
+		}
+		return change("confirm", func(s apply.System) error { return apply.Confirm(s) }, stdout, stderr)
+	case "revert":
+		// --timer and --boot are for the revert timer and rollgate-boot.service.
+		modes := map[string]apply.Mode{"": apply.ByHand, "--timer": apply.ByTimer, "--boot": apply.AtBoot}
+		opt := ""
+		if len(args) == 2 {
+			opt = args[1]
+		}
+		mode, ok := modes[opt]
+		if !ok || len(args) > 2 {
+			fmt.Fprint(stderr, usage)
+			return 2
+		}
+		return change("revert", func(s apply.System) error { return apply.Revert(s, mode) }, stdout, stderr)
 	case "help", "-h", "--help":
 		fmt.Fprint(stdout, usage)
 		return 0
@@ -73,6 +102,51 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "rollgate: unknown command %q\n\n%s", args[0], usage)
 		return 2
 	}
+}
+
+// system is the real router: root /, real programs.
+func system(stdout io.Writer) apply.System {
+	self, err := os.Executable()
+	if err != nil {
+		self = "/usr/bin/rollgate"
+	}
+	return apply.System{Root: "/", Run: apply.Exec{}, Out: stdout, Now: time.Now,
+		Self: self, SSHConnection: os.Getenv("SSH_CONNECTION")}
+}
+
+// change runs a command that changes the router.
+func change(name string, f func(apply.System) error, stdout, stderr io.Writer) int {
+	if os.Geteuid() != 0 {
+		fmt.Fprintf(stderr, "rollgate %s: must run as root\n", name)
+		return 1
+	}
+	if err := f(system(stdout)); err != nil {
+		fmt.Fprintf(stderr, "rollgate %s: %v\n", name, err)
+		return 1
+	}
+	return 0
+}
+
+func applyCmd(args []string, stdout, stderr io.Writer) int {
+	if len(args) > 1 {
+		fmt.Fprint(stderr, usage)
+		return 2
+	}
+	path := config.DefaultPath
+	if len(args) == 1 {
+		path = args[0]
+	}
+	return change("apply", func(s apply.System) error {
+		c, source, ok := load(path, stderr)
+		if !ok || !localPrefix(c, s.Root, stderr) {
+			return errors.New("invalid config; nothing was changed")
+		}
+		files, err := compile.Compile(c, source, filepath.Base(path))
+		if err != nil {
+			return err
+		}
+		return apply.Apply(s, c, source, files)
+	}, stdout, stderr)
 }
 
 // diffCmd follows diff(1)'s exit codes: 0 no changes, 1 changes, 2 trouble.

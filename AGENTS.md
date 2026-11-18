@@ -66,7 +66,7 @@ M3 (safe apply). Anything marked
 | `tests/vm/` | L3 QEMU boot test and rollback rehearsal. |
 | `tests/golden/` | L1 golden tests: each `<case>/router.toml` and the exact files it must compile to. |
 | `tests/netns/` | L2 namespace test: `run.sh`, its `router.toml`, a TCP listener and a DHCP/DNS probe. |
-| `compiler/` | Go source for the `rollgate` CLI: `validate`, `compile` (networkd, sysctl, nftables, dnsmasq, Unbound, sshd, IPv6 auto), `diff` and `schema` work; `apply` is *(planned, M3)*; its generation store and file installer are in `compiler/apply/` (ADR 0010). Templates are in `compiler/templates/`. |
+| `compiler/` | Go source for the `rollgate` CLI: `validate`, `compile` (networkd, sysctl, nftables, dnsmasq, Unbound, sshd, IPv6 auto), `diff`, `schema`, and `apply`, `confirm` and `revert` (ADR 0010, code in `compiler/apply/`) work; `status` and `rollback-config` are *(planned, M3)*, and the image ships `rollgate` from M3 step 5 *(planned)*. Templates are in `compiler/templates/`. |
 | `packaging/` *(planned)* | PKGBUILDs for our own packages (e.g. `rollgate` itself). |
 
 ## Commands
