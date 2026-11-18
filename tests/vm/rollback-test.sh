@@ -30,6 +30,7 @@ monitor_port=$((ssh_port + 1))
 # Must match root_start_sector in image/build.sh (ESP at 2048, 512 MiB long).
 root_offset=$(((2048 + 512 * 2048) * 512))
 serial="$log_dir/rollback.serial.log"
+report="$log_dir/rollback.report.log"
 
 die() { echo "rollback-test: FAIL: $*" >&2; exit 1; }
 log() { echo "==> $*"; }
@@ -63,17 +64,18 @@ vm() {
     -o LogLevel=ERROR -o ConnectTimeout=5 -o BatchMode=yes root@127.0.0.1 "$@"
 }
 
-# wait_for_boot <n>: waits for the n-th boot report on the serial console and for SSH,
-# then checks the report says the system is running with nothing failed.
+# wait_for_boot <n>: waits for the n-th boot report and for SSH, then checks the report
+# says the system is running with nothing failed. Reports arrive on their own
+# virtio-serial channel ($report), never mixed with console output.
 wait_for_boot() {
   local n=$1 deadline=$((SECONDS + timeout_s)) line
-  while (($(grep -ac 'ROLLGATE_BOOT state=' "$serial" || true) < n)); do
+  while (($(grep -ac '^ROLLGATE_BOOT state=' "$report" || true) < n)); do
     ((SECONDS < deadline)) || die "boot $n: no ROLLGATE_BOOT line within ${timeout_s}s (log: $serial)"
     kill -0 "$qemu_pid" 2>/dev/null || die "boot $n: QEMU exited (log: $serial)"
     sleep 2
   done
-  line=$(grep -a 'ROLLGATE_BOOT state=' "$serial" | sed -n "${n}p" | tr -d '\r')
-  echo "    ${line#*boot-report*: }"
+  line=$(grep -a '^ROLLGATE_BOOT state=' "$report" | sed -n "${n}p" | tr -d '\r')
+  echo "    $line"
   [[ $line == *"state=running "* && $line == *"failed=" ]] || die "boot $n did not come up cleanly: $line"
   until vm true 2>/dev/null; do
     ((SECONDS < deadline)) || die "boot $n: SSH not reachable"
@@ -119,12 +121,15 @@ install -m 0600 "$work/key.pub" "$work/root/root/.ssh/authorized_keys"
 umount "$work/root"
 
 : > "$serial"
+: > "$report"
 qemu-system-x86_64 -machine q35 -m 1024 -smp 2 "${accel[@]}" \
   -drive if=pflash,format=raw,readonly=on,file="$ovmf_code" \
   -drive if=pflash,format=raw,file="$work/vars.fd" \
   -drive file="$work/disk.img",format=raw,if=virtio \
   -nic user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:"$ssh_port"-:22 \
   -display none -monitor tcp:127.0.0.1:"$monitor_port",server=on,wait=off \
+  -chardev file,id=report,path="$report" \
+  -device virtio-serial-pci -device virtserialport,chardev=report,name=org.rollgate.report \
   -serial file:"$serial" &
 qemu_pid=$!
 

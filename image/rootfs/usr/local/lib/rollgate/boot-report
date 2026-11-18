@@ -1,9 +1,18 @@
 #!/bin/sh
-# Prints one line on the console once boot has finished. The L3 boot test
-# (tests/vm/boot-test.sh) parses it; humans at the console can read it too.
+# Prints one line on the console once boot has finished. The L3 tests
+# (tests/vm/) parse it; humans at the console can read it too.
 #   ROLLGATE_BOOT state=<running|degraded|...> kernel=<uname -r> failed=<unit,unit,...>
 # Replaced by the health checks (/usr/lib/rollgate/health.d) in M4.
 
 state=$(systemctl is-system-running --wait)
 failed=$(systemctl list-units --failed --plain --no-legend | awk '{print $1}' | paste -sd, -)
-echo "ROLLGATE_BOOT state=$state kernel=$(uname -r) failed=$failed"
+line="ROLLGATE_BOOT state=$state kernel=$(uname -r) failed=$failed"
+echo "$line"
+
+# Test VMs attach a virtio-serial port with this name, so the tests get the line on a
+# channel of its own. On the console it can be interleaved with the login prompt's
+# terminal codes. Real hardware has no such port.
+port=/dev/virtio-ports/org.rollgate.report
+if [ -c "$port" ]; then
+  echo "$line" > "$port"
+fi
