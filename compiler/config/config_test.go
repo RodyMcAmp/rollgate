@@ -2,8 +2,10 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"net/netip"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -84,8 +86,8 @@ func TestProblems(t *testing.T) {
 	}{
 		{"minimal config is valid", base, nil},
 		{"unknown key", base + "[system]\nhostnme = \"x\"\n", []string{"E007 system.hostnme"}},
-		{"missing schema_version", "[system]\n", []string{"E010 schema_version"}},
-		{"unsupported schema_version", "schema_version = 2\n", []string{"E009 schema_version"}},
+		{"missing schema_version", strings.Replace(base, "schema_version = 1", "", 1), []string{"E010 schema_version"}},
+		{"unsupported schema_version", strings.Replace(base, "= 1", "= 2", 1), []string{"E009 schema_version"}},
 		{"not TOML", "schema_version = \n", []string{"E012 line 1"}},
 		{"wrong type", base + "[[vlan]]\nname = \"iot\"\nparent = \"lan\"\nid = \"20\"\n", []string{"E012 line 16"}},
 
@@ -150,6 +152,35 @@ func TestProblems(t *testing.T) {
 			[]string{`E008 vlan "iot" ipv6_subnet_id`}},
 		{"subnet id range", base + dmz + "ipv4 = \"10.0.0.1/24\"\nipv6_subnet_id = 256\n", []string{`E008 interface "dmz" ipv6_subnet_id`}},
 
+		// Rules relating values to each other (rules.go).
+		{"no wan", strings.Replace(base, `name = "wan"`, `name = "uplink"`, 1), []string{"E001 interface"}},
+		{"two wans", base + vlan("wan2", "lan", 5, `zone = "wan"`, `ipv4 = "dhcp"`), []string{`E001 vlan "wan2"`}},
+		{"tagged wan", strings.Replace(base, `name = "wan"`, `name = "modem"`, 1) + vlan("wan", "modem", 35, `ipv4 = "dhcp"`), nil},
+		{"overlapping subnets", base + dmz + "ipv4 = \"192.168.10.129/25\"\n", []string{`E002 interface "dmz" ipv4`}},
+		{"vlan on unknown parent", base + vlan("iot", "lna", 20, `ipv4 = "10.0.1.1/24"`), []string{`E003 vlan "iot" parent`}},
+		{"vlan on a vlan", base + vlan("a", "lan", 20, `ipv4 = "10.0.1.1/24"`) + vlan("b", "a", 30, `ipv4 = "10.0.2.1/24"`),
+			[]string{`E003 vlan "b" parent`}},
+		{"unknown management zone", base + "[management]\nallowed_zones = [\"lna\"]\n", []string{"E003 management.allowed_zones"}},
+		{"unknown policy zone", base + "[[firewall.policy]]\nfrom = \"iot\"\nto = \"wan\"\naction = \"accept\"\n", []string{"E003 firewall.policy #1 from"}},
+		{"management unreachable", base + dmz + "ipv4 = \"dhcp\"\n[management]\nallowed_zones = [\"dmz\"]\n", []string{"E004 management.allowed_zones"}},
+		{"dhcp on unknown interface", base + "[dhcp.lna]\nrange = [\"192.168.10.100\", \"192.168.10.199\"]\n", []string{"E003 dhcp.lna"}},
+		{"dhcp on wan", base + "[dhcp.wan]\nrange = [\"192.168.10.100\", \"192.168.10.199\"]\n", []string{"E005 dhcp.wan"}},
+		{"dhcp without static address", base + dmz + "ipv4 = \"dhcp\"\n[dhcp.dmz]\nrange = [\"10.0.0.100\", \"10.0.0.199\"]\n", []string{"E005 dhcp.dmz"}},
+		{"dhcp range outside subnet", base + "[dhcp.lan]\nrange = [\"192.168.11.100\", \"192.168.11.199\"]\n",
+			[]string{"E005 dhcp.lan range", "E005 dhcp.lan range"}},
+		{"dhcp range includes router", base + "[dhcp.lan]\nrange = [\"192.168.10.1\", \"192.168.10.50\"]\n", []string{"E005 dhcp.lan range"}},
+		{"dhcp range includes broadcast", base + "[dhcp.lan]\nrange = [\"192.168.10.100\", \"192.168.10.255\"]\n", []string{"E005 dhcp.lan range"}},
+		{"static lease in range", base + lease("192.168.10.150"), []string{`E005 dhcp.lan static "a" ipv4`}},
+		{"static lease on router", base + lease("192.168.10.1"), []string{`E005 dhcp.lan static "a" ipv4`}},
+		{"static lease outside subnet", base + lease("192.168.11.5"), []string{`E005 dhcp.lan static "a" ipv4`}},
+		{"forward to the router", base + pf(`wan_port = 80`, `to = "192.168.10.1:80"`), []string{`E006 firewall.port_forward "web" to`}},
+		{"forward to the internet", base + pf(`wan_port = 80`, `to = "8.8.8.8:80"`), []string{`E006 firewall.port_forward "web" to`}},
+		{"port claimed twice", base + pf(`wan_port = 80`, `to = "192.168.10.50:80"`) +
+			"[[firewall.port_forward]]\nname = \"web2\"\nprotocol = \"tcp+udp\"\nwan_port = \"70-90\"\nto = \"192.168.10.51:80\"\n",
+			[]string{`E006 firewall.port_forward "web2" wan_port`}},
+		{"same port, other protocol", base + pf(`wan_port = 53`, `to = "192.168.10.50:53"`) +
+			"[[firewall.port_forward]]\nname = \"dns\"\nprotocol = \"udp\"\nwan_port = 53\nto = \"192.168.10.50:53\"\n", nil},
+
 		{"every problem is reported", base + "[system]\nipv6 = \"on\"\nhostname = \"-\"\n[management]\nconfirm_timeout_seconds = 0\n",
 			[]string{"E009 system.hostname", "E009 system.ipv6", "E009 management.confirm_timeout_seconds"}},
 	}
@@ -183,6 +214,20 @@ func pf(lines ...string) string {
 		s += l + "\n"
 	}
 	return s
+}
+
+func vlan(name, parent string, id int, lines ...string) string {
+	s := fmt.Sprintf("\n[[vlan]]\nname = %q\nparent = %q\nid = %d\n", name, parent, id)
+	for _, l := range lines {
+		s += l + "\n"
+	}
+	return s
+}
+
+// lease adds a DHCP section for lan (range .100–.199) with one static lease.
+func lease(ipv4 string) string {
+	return "\n[dhcp.lan]\nrange = [\"192.168.10.100\", \"192.168.10.199\"]\n" +
+		"[[dhcp.lan.static]]\nhostname = \"a\"\nmac = \"00:00:5e:00:53:10\"\nipv4 = \"" + ipv4 + "\"\n"
 }
 
 func equal(a, b any) bool {

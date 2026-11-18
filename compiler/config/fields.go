@@ -27,7 +27,7 @@ var (
 const nameRule = "use 1–15 lowercase letters, digits or '-', starting with a letter"
 
 // validateFields checks each value on its own: formats, ranges and required
-// keys. Rules that relate values to each other (E001–E006) arrive in M2 PR 2.
+// keys. Rules that relate values to each other (E001–E006) are in rules.go.
 func validateFields(c *Config, md toml.MetaData, ps *problems) {
 	if !md.IsDefined("schema_version") {
 		ps.add(CodeMissing, "schema_version", "add `schema_version = 1` at the top of the file")

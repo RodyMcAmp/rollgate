@@ -123,12 +123,12 @@ Each problem has a stable error code, so docs, tests and agents can refer to it.
 
 | Code | Rule |
 |---|---|
-| `E001` | Exactly one interface or VLAN is in the zone `wan`. *(planned, M2 PR 2)* |
-| `E002` | No two subnets overlap. *(planned, M2 PR 2)* |
-| `E003` | Every zone or interface named in `management`, `firewall.policy`, `dhcp` or a VLAN's `parent` exists. *(planned, M2 PR 2)* |
-| `E004` | Management is reachable: at least one zone in `allowed_zones` has an interface with a static address. *(planned, M2 PR 2)* |
-| `E005` | DHCP ranges and static leases lie inside their subnet and don't collide with each other or with the router's address. *(planned, M2 PR 2)* |
-| `E006` | Port forward targets lie inside a non-WAN subnet. *(planned, M2 PR 2)* |
+| `E001` | Exactly one interface or VLAN is in the zone `wan`. |
+| `E002` | No two subnets overlap. |
+| `E003` | Every zone or interface named in `management`, `firewall.policy`, `dhcp` or a VLAN's `parent` exists. |
+| `E004` | Management is reachable: at least one zone in `allowed_zones` has an interface with a static address. |
+| `E005` | DHCP is served only on non-WAN interfaces and VLANs with a static address. Ranges and static leases lie inside that subnet and don't collide with each other or with the router's address. |
+| `E006` | Port forward targets lie inside a non-WAN subnet and aren't the router itself. Two port forwards can't claim the same WAN port and protocol. |
 | `E007` | Unknown keys are errors, not warnings, so typos can't silently do nothing. |
 | `E008` | `ipv6.ula_prefix`, if set, is a /48 inside `fd00::/8`; `wan_prefix_hint` is 48–64; `ipv6_subnet_id` values are 0–255 and unique. |
 | `E009` | A value has the wrong format or is out of range (for example an address, a MAC, a port, or a choice such as `ipv6`). |
