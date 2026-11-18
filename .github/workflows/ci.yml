@@ -35,6 +35,15 @@ jobs:
           pacman-key --populate archlinux
           pacman -Syu --noconfirm --needed make arch-install-scripts btrfs-progs \
             dosfstools gptfdisk grub qemu-system-x86 edk2-ovmf openssh
+      # The pinned snapshot's packages never change, so keep them between runs
+      # instead of downloading ~625 MB from archive.archlinux.org every time.
+      # pacman still checks every package's signature when installing.
+      - name: Restore package cache
+        uses: actions/cache@v5
+        with:
+          path: build/pkgcache
+          key: pkgcache-${{ hashFiles('image/snapshot-date', 'image/packages.txt') }}
+          restore-keys: pkgcache-
       - name: Build image
         run: make image
       - name: L3 boot test
