@@ -62,7 +62,7 @@ with M2 (the config compiler). Anything marked
 | `examples/router.toml` | A complete example config. Keep it valid against the spec. |
 | `image/` | `build.sh` (the image build), `packages.txt`, `rootfs/` overlay, `snapshot-date`. |
 | `tests/vm/` | L3 QEMU boot test. `golden/` and `netns/` arrive in M2. |
-| `compiler/` *(planned, M2)* | Go source for the `rollgate` CLI: validate, compile, diff, apply. |
+| `compiler/` | Go source for the `rollgate` CLI (M2, in progress): `validate` works; compile, diff and apply are *(planned)*. |
 | `packaging/` *(planned)* | PKGBUILDs for our own packages (e.g. `rollgate` itself). |
 
 ## Commands
@@ -71,7 +71,8 @@ Run `image` and `test-vm` on an Arch host as root (or with sudo); see `docs/dev-
 
 | Command | Does |
 |---|---|
-| `make check` | L0 (L1 too from M2): shellcheck, example config checks. Run before every commit. |
+| `make check` | L0 + L1: shellcheck, gofmt, go vet, staticcheck, Go tests, and `rollgate validate` on the example config. Run before every commit. |
+| `make rollgate` | Builds the static `rollgate` CLI into `build/rollgate`. |
 | `make image` | Builds `build/rollgate-<date>.img` at the date in `image/snapshot-date`. |
 | `make test-vm` | L3: boots the image in QEMU under UEFI with both kernels and checks for a clean boot. More end-to-end checks are added in M2. |
 | `make test-rollback` | L3: rollback rehearsal. Bad update → boot the pre-update snapshot from the GRUB menu → `rollgate-snapshot-rollback` → restored system boots. Follows `docs/runbooks/recovery.md`; keep the two in sync. |
@@ -98,6 +99,9 @@ boot and GRUB configuration, and anything that touches management access.
 ## Style
 
 - Go: `gofmt`, `go vet`, `staticcheck`. Errors are returned, not logged and ignored.
+  Standard library first. The only third-party module is `github.com/BurntSushi/toml`;
+  a new one needs a stated reason in the PR and a human reviewer.
+  Validation problems use the stable codes in `docs/config-spec.md#validation-rules`.
   Generated configs come from `text/template` files in `compiler/templates/`, not from
   string concatenation.
 - Generated files start with a header comment naming the generator and the source config.

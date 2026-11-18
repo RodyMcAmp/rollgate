@@ -1,18 +1,22 @@
-# CI is the source of truth (docs/testing.md): L0 on every push and PR, then build the
-# image and run the L3 boot test.
+# CI is the source of truth (docs/testing.md): L0 + L1 on every push to main and every
+# PR, then build the image and run the L3 tests.
 name: ci
 
 on:
   push:
+    branches: [main]
   pull_request:
 
 jobs:
   check:
-    name: L0 checks
+    name: L0 + L1 checks
     runs-on: ubuntu-latest
+    # The same Arch tools as docs/dev-setup.md, so local and CI results match.
+    container: archlinux:latest
     steps:
       - uses: actions/checkout@v5
-      # ubuntu-latest ships shellcheck and Python 3.11+ (tomllib).
+      - name: Install check tools
+        run: pacman -Syu --noconfirm --needed make shellcheck go staticcheck
       - run: make check
 
   image:

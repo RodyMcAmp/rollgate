@@ -19,8 +19,8 @@ A typical home config should fit on one screen and need no networking expertise.
 | Key | Type | Required | Notes |
 |---|---|---|---|
 | `schema_version` | integer | yes | `1` |
-| `[system]` | table | yes | |
-| `[management]` | table | yes | |
+| `[system]` | table | no | all keys have defaults |
+| `[management]` | table | no | all keys have defaults |
 | `[[interface]]` | array of tables | yes, at least one `wan` and one other zone | |
 | `[[vlan]]` | array of tables | no | |
 | `[dhcp.<interface>]` | table per interface | no | |
@@ -81,7 +81,7 @@ There are no per-interface IPv6 settings. IPv6 is handled automatically by `syst
 |---|---|---|---|
 | `mode` | string | `"recursive"` | `"recursive"` (Unbound resolves from the root servers) or `"forward"` |
 | `forwarders` | array of strings | — | required when `mode = "forward"`. Each is `"ip"` or `"ip@port#tls-name"` for DNS over TLS. |
-| `blocklists` | array of URLs | `[]` | domain blocklists fetched on a timer *(planned, M6)* |
+| `blocklists` | array of URLs | `[]` | domain blocklists fetched on a timer *(planned, M6)*. Until then a non-empty list is rejected, so it can't silently do nothing. |
 
 ## `[firewall]`
 
@@ -113,18 +113,28 @@ These overrides exist for unusual setups. They are deliberately left out of the 
 | Key | Type | Default | Notes |
 |---|---|---|---|
 | `[ipv6] ula_prefix` | string | generated once, stored in `/etc/rollgate/state/ula-prefix` | a fixed local IPv6 /48, e.g. kept from a previous router |
-| `[ipv6] wan_prefix_hint` | integer | `56` | delegated prefix size to request from the ISP |
-| `ipv6_subnet_id` on `[[interface]]` / `[[vlan]]` | integer | derived from the zone name | pins the zone's /64 within the /48 (or within the delegated prefix) |
+| `[ipv6] wan_prefix_hint` | integer 48–64 | `56` | delegated prefix size to request from the ISP |
+| `ipv6_subnet_id` on `[[interface]]` / `[[vlan]]` | integer 0–255 | derived from the zone name | pins the zone's /64 within the /48 (or within the delegated prefix; 0–255 fits the default /56) |
 
-## Validation rules (semantic, beyond the schema)
+## Validation rules
 
-1. Exactly one zone named `wan`.
-2. No two subnets overlap.
-3. Every zone named in `management`, `firewall.policy`, or `dhcp` exists.
-4. Management is reachable: at least one zone in `allowed_zones` has an interface with a static address.
-5. DHCP ranges and static leases lie inside their subnet and don't collide with each other or with the router's address.
-6. Port forward targets lie inside a non-WAN subnet.
-7. Unknown keys are errors, not warnings, so typos can't silently do nothing.
-8. `ipv6.ula_prefix`, if set, is a /48 inside `fd00::/8`. `ipv6_subnet_id` values are unique.
+`rollgate validate [file]` checks a config (default `/etc/rollgate/router.toml`) and lists every problem it finds, not just the first.
+Each problem has a stable error code, so docs, tests and agents can refer to it. Codes are never reused for a different meaning.
 
-Each rule has a stable error code (`E001`…) *(planned)* so docs, tests and agents can refer to it.
+| Code | Rule |
+|---|---|
+| `E001` | Exactly one interface or VLAN is in the zone `wan`. *(planned, M2 PR 2)* |
+| `E002` | No two subnets overlap. *(planned, M2 PR 2)* |
+| `E003` | Every zone or interface named in `management`, `firewall.policy`, `dhcp` or a VLAN's `parent` exists. *(planned, M2 PR 2)* |
+| `E004` | Management is reachable: at least one zone in `allowed_zones` has an interface with a static address. *(planned, M2 PR 2)* |
+| `E005` | DHCP ranges and static leases lie inside their subnet and don't collide with each other or with the router's address. *(planned, M2 PR 2)* |
+| `E006` | Port forward targets lie inside a non-WAN subnet. *(planned, M2 PR 2)* |
+| `E007` | Unknown keys are errors, not warnings, so typos can't silently do nothing. |
+| `E008` | `ipv6.ula_prefix`, if set, is a /48 inside `fd00::/8`; `wan_prefix_hint` is 48–64; `ipv6_subnet_id` values are 0–255 and unique. |
+| `E009` | A value has the wrong format or is out of range (for example an address, a MAC, a port, or a choice such as `ipv6`). |
+| `E010` | A required key is missing. |
+| `E011` | A name is used twice (interfaces and VLANs, VLAN IDs on one parent, static leases, port forwards). |
+| `E012` | The file can't be read or isn't valid TOML (including a value of the wrong type, such as `id = "20"`). |
+
+Names of interfaces, VLANs and zones are 1–15 characters: lowercase letters, digits and `-`, starting with a letter.
+The 15-character limit is Linux's limit on network device names.
