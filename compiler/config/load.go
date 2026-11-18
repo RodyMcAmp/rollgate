@@ -50,6 +50,7 @@ func Parse(data []byte) (*Config, error) {
 	}
 	applyDefaults(&c, md)
 	validateFields(&c, md, &ps)
+	validateRules(&c, &ps)
 	if len(ps.list) > 0 {
 		return nil, ps.list
 	}
