@@ -2,7 +2,7 @@
 
 This file is the contract between users and the compiler.
 Change this spec and `examples/router.toml` **before** changing compiler code.
-A JSON Schema generated from the Go types will be published as `schema/router.schema.json` *(planned, M2)* so editors and agents can validate configs.
+The JSON Schema `schema/router.schema.json` is generated from the Go types (`rollgate schema`), so editors and agents can check a config as it's written. Editors with TOML schema support (for example VS Code with the Even Better TOML extension) can use it with a first line `#:schema https://raw.githubusercontent.com/RodyMcAmp/rollgate/main/schema/router.schema.json`. `rollgate validate` remains the full check.
 
 Format: [TOML 1.0](https://toml.io/en/v1.0.0). It was chosen over YAML because it has no implicit type coercion (YAML reads `no` as false, for example) and no significant indentation.
 

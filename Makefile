@@ -23,10 +23,10 @@ check:
 	cd compiler && go vet ./... && staticcheck ./... && go test ./...
 	cd compiler && go run ./cmd/rollgate validate ../examples/router.toml
 
-## Rewrite tests/golden/*/expected from the compiler. Review the diff before committing;
-## never run this just to make a failing test pass (docs/testing.md).
+## Rewrite tests/golden/*/expected and schema/router.schema.json from the compiler.
+## Review the diff before committing; never run this just to make a failing test pass.
 golden-update:
-	cd compiler && go test ./compile -run TestGolden -update
+	cd compiler && go test ./compile -run TestGolden -update && go test ./config -run TestSchemaFile -update
 
 ## Build the rollgate CLI as a static binary (ADR 0005).
 rollgate:
