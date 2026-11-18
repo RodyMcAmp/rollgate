@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +14,11 @@ func TestValidateCommand(t *testing.T) {
 	if err := os.WriteFile(bad, []byte("schema_version = 1\n[system]\nipv6 = \"on\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	// A root with the example's compiled files installed, for diff.
+	installed := filepath.Join(t.TempDir(), "root")
+	if code := run([]string{"compile", "-o", installed, "../../../examples/router.toml"}, io.Discard, io.Discard); code != 0 {
+		t.Fatalf("compile exit code %d", code)
+	}
 	cases := []struct {
 		name     string
 		args     []string
@@ -20,6 +26,9 @@ func TestValidateCommand(t *testing.T) {
 		inStdout string
 		inStderr string
 	}{
+		{"diff with nothing installed", []string{"diff", "-root", t.TempDir(), "../../../examples/router.toml"}, 1, "new: ", ""},
+		{"diff with the same files installed", []string{"diff", "-root", installed, "../../../examples/router.toml"}, 0, "no changes", ""},
+		{"diff refuses invalid config", []string{"diff", "-root", installed, bad}, 2, "", "E009"},
 		{"example is valid", []string{"validate", "../../../examples/router.toml"}, 0, "valid", ""},
 		{"invalid config", []string{"validate", bad}, 1, "", "E009 system.ipv6"},
 		{"missing file", []string{"validate", filepath.Join(t.TempDir(), "nope.toml")}, 1, "", "E012"},
