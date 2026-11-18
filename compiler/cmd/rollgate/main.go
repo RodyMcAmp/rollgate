@@ -24,6 +24,7 @@ commands:
   diff [-root DIR] [file]  show what installing the compiled files would change
                            below DIR (default /); exit 0 no changes, 1 changes,
                            2 invalid config or error; changes nothing
+  schema                   print the JSON Schema for router.toml
 `
 
 func main() {
@@ -55,6 +56,14 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return compileCmd(args[1:], stdout, stderr)
 	case "diff":
 		return diffCmd(args[1:], stdout, stderr)
+	case "schema":
+		s, err := config.Schema()
+		if err != nil || len(args) > 1 {
+			fmt.Fprintf(stderr, "rollgate schema: %v\n%s", err, usage)
+			return 2
+		}
+		stdout.Write(s)
+		return 0
 	case "help", "-h", "--help":
 		fmt.Fprint(stdout, usage)
 		return 0

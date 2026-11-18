@@ -36,6 +36,7 @@ func TestValidateCommand(t *testing.T) {
 		{"compile needs -o", []string{"compile", "../../../examples/router.toml"}, 2, "", "usage"},
 		{"compile refuses invalid config", []string{"compile", "-o", filepath.Join(t.TempDir(), "out"), bad}, 1, "", "E009"},
 		{"compile refuses non-empty dir", []string{"compile", "-o", filepath.Dir(bad), "../../../examples/router.toml"}, 1, "", "not empty"},
+		{"schema", []string{"schema"}, 0, "\"$schema\"", ""},
 		{"no command", nil, 2, "", "usage"},
 		{"unknown command", []string{"frobnicate"}, 2, "", "unknown command"},
 	}
