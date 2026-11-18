@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # L3 boot test (docs/testing.md): boots the image in QEMU under UEFI twice, once with
 # the default kernel (linux) and once with the fallback (linux-lts), and checks the
-# ROLLGATE_BOOT line each boot prints on the serial console.
+# ROLLGATE_BOOT line each boot reports (on a virtio-serial channel of its own).
 #
 # Usage:  sudo tests/vm/boot-test.sh build/rollgate-<date>.img
 # Env:    LOG_DIR    where serial logs are kept (default: next to the image, test-logs/)
@@ -57,11 +57,13 @@ umount "$work/esp"
 boot_once() {
   local name=$1 entry=$2 want=$3
   local disk="$work/$name.img" vars="$work/$name.vars.fd" serial="$log_dir/$name.serial.log"
+  local report="$log_dir/$name.report.log"
 
   log "boot '$name'${entry:+ (entry: $entry)}"
   cp --sparse=always "$image" "$disk"
   cp "$ovmf_vars" "$vars"
   : > "$serial"
+  : > "$report"
   if [[ -n $entry ]]; then
     mount -o loop,offset="$esp_offset" "$disk" "$work/esp"
     grub-editenv "$work/esp/grub/grubenv" set "next_entry=$entry"
@@ -73,12 +75,16 @@ boot_once() {
     -drive if=pflash,format=raw,file="$vars" \
     -drive file="$disk",format=raw,if=virtio \
     -nic user,model=virtio-net-pci \
+    -chardev file,id=report,path="$report" \
+    -device virtio-serial-pci -device virtserialport,chardev=report,name=org.rollgate.report \
     -display none -monitor none -serial file:"$serial" &
   qemu_pid=$!
 
+  # The boot report arrives on its own virtio-serial channel (see
+  # image/rootfs/usr/local/lib/rollgate/boot-report), never mixed with console output.
   local line="" deadline=$((SECONDS + timeout_s))
   while ((SECONDS < deadline)); do
-    line=$(grep -a -m1 'ROLLGATE_BOOT state=' "$serial" | tr -d '\r' || true)
+    line=$(grep -a -m1 '^ROLLGATE_BOOT state=' "$report" | tr -d '\r' || true)
     [[ -n $line ]] && break
     kill -0 "$qemu_pid" 2>/dev/null || break
     sleep 2
