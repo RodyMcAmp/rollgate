@@ -19,8 +19,10 @@ const usage = `usage: rollgate <command> [arguments]
 
 commands:
   validate [file]          check a config (default ` + config.DefaultPath + `)
-  compile -o DIR [file]    validate, then write the generated system files below
-                           DIR (a new or empty directory); changes nothing else
+  compile -o DIR [-root R] [file]
+                           validate, then write the generated system files below
+                           DIR (a new or empty directory); changes nothing else.
+                           Reads the stored local IPv6 prefix below R (default /)
   diff [-root DIR] [file]  show what installing the compiled files would change
                            below DIR (default /); exit 0 no changes, 1 changes,
                            2 invalid config or error; changes nothing
@@ -87,7 +89,7 @@ func diffCmd(args []string, stdout, stderr io.Writer) int {
 		path = fs.Arg(0)
 	}
 	c, source, ok := load(path, stderr)
-	if !ok {
+	if !ok || !localPrefix(c, *root, stderr) {
 		return 2
 	}
 	files, err := compile.Compile(c, source, filepath.Base(path))
@@ -114,6 +116,7 @@ func compileCmd(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("compile", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	out := fs.String("o", "", "output directory (new or empty)")
+	root := fs.String("root", "/", "where to find the stored local IPv6 prefix")
 	if err := fs.Parse(args); err != nil || *out == "" || fs.NArg() > 1 {
 		fmt.Fprint(stderr, usage)
 		return 2
@@ -123,7 +126,7 @@ func compileCmd(args []string, stdout, stderr io.Writer) int {
 		path = fs.Arg(0)
 	}
 	c, source, ok := load(path, stderr)
-	if !ok {
+	if !ok || !localPrefix(c, *root, stderr) {
 		return 1
 	}
 	files, err := compile.Compile(c, source, filepath.Base(path))
@@ -138,6 +141,25 @@ func compileCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, filepath.Join(*out, filepath.FromSlash(p)))
 	}
 	return 0
+}
+
+// localPrefix supplies the local IPv6 prefix for ipv6 = "auto" when the config
+// doesn't set one: the stored prefix below root, or a new one, which the
+// compiled files then store (docs/config-spec.md, "How ipv6 = auto is compiled").
+func localPrefix(c *config.Config, root string, stderr io.Writer) bool {
+	if c.System.IPv6 != "auto" || c.IPv6.ULA.IsValid() {
+		return true
+	}
+	p, generated, err := compile.LocalPrefix(root)
+	if err != nil {
+		fmt.Fprintf(stderr, "rollgate: %v\n", err)
+		return false
+	}
+	if generated {
+		fmt.Fprintf(stderr, "rollgate: no local IPv6 prefix stored yet; using new prefix %s (applying stores it)\n", p)
+	}
+	c.IPv6.ULA = p
+	return true
 }
 
 // load reads and validates a config, printing every problem to stderr.

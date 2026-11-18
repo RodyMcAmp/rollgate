@@ -9,7 +9,7 @@ Name=wan
 RequiredForOnline=routable
 
 [Network]
-DHCP=ipv4
+DHCP=yes
 
 [DHCPv4]
 # The router resolves names itself (Unbound); don't take DNS, domain or
@@ -17,3 +17,15 @@ DHCP=ipv4
 UseDNS=no
 UseDomains=no
 UseHostname=no
+
+[IPv6AcceptRA]
+# Always ask for a delegated prefix, even if the ISP's router advertisement
+# doesn't mention DHCPv6. Harmless when the ISP offers no IPv6.
+DHCPv6Client=always
+UseDNS=no
+UseDomains=no
+
+[DHCPv6]
+PrefixDelegationHint=::/56
+UseDNS=no
+UseDomains=no

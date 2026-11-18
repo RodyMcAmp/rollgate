@@ -40,6 +40,19 @@ type network struct {
 	Addr       string   // router address with prefix, when static
 	VLANs      []string // devices of VLANs on this interface
 	IPv6Off    bool
+	IPv6       *lanIPv6 // ipv6 = "auto": non-WAN networks with a static address
+	WANIPv6    int      // ipv6 = "auto", WAN only: delegated prefix size to ask for
+}
+
+// lanIPv6 is a local network's IPv6 setup (docs/config-spec.md, "How ipv6 =
+// auto is compiled").
+type lanIPv6 struct {
+	Addr     string // router's ULA address with /64
+	Prefix   string // the ULA /64 announced to clients
+	DNS      string // router's ULA address, announced as DNS server
+	SubnetID string // for the ISP's delegated prefix, e.g. "0x4f"
+	Domain   string
+	Uplink   string // WAN device that receives the delegated prefix
 }
 
 // Compile renders every file for c. source is the router.toml it was loaded
@@ -65,6 +78,43 @@ func Compile(c *config.Config, source []byte, sourceName string) (Files, error) 
 		vlansOn[v.Parent] = append(vlansOn[v.Parent], v.Name)
 	}
 
+	// ipv6 = "auto" (ADR 0008).
+	var ids map[string]int
+	var wanDevice string
+	if !ipv6Off {
+		if !c.IPv6.ULA.IsValid() {
+			return nil, fmt.Errorf("no local IPv6 prefix: set ipv6.ula_prefix, or let the caller supply one (see LocalPrefix)")
+		}
+		ids = subnetIDs(c)
+		for _, in := range c.Interfaces {
+			if in.Zone == "wan" {
+				wanDevice = in.Device()
+			}
+		}
+		for _, v := range c.VLANs {
+			if v.Zone == "wan" {
+				wanDevice = v.Name
+			}
+		}
+		// Store the prefix, so a generated one stays the same from now on.
+		if c.IPv6.ULAPrefix == "" {
+			files[ULAStateFile] = []byte(header + "\n# The router's local IPv6 prefix (ADR 0008). Set ipv6.ula_prefix to change it.\n" + c.IPv6.ULA.String() + "\n")
+		}
+	}
+	setIPv6 := func(n *network) {
+		switch id, ok := ids[n.Name]; {
+		case ipv6Off:
+		case n.WAN:
+			n.WANIPv6 = c.IPv6.WANPrefixHint
+		case ok:
+			p := subnet64(c.IPv6.ULA, id)
+			n.IPv6 = &lanIPv6{
+				Addr: routerAddr(p).String(), Prefix: p.String(), DNS: routerAddr(p).Addr().String(),
+				SubnetID: fmt.Sprintf("0x%x", id), Domain: c.System.Domain, Uplink: wanDevice,
+			}
+		}
+	}
+
 	for _, in := range c.Interfaces {
 		n := network{
 			Header: header, Kind: "interface", Name: in.Name, Zone: in.Zone,
@@ -74,6 +124,7 @@ func Compile(c *config.Config, source []byte, sourceName string) (Files, error) 
 		if in.Addr.IsValid() {
 			n.Addr = in.Addr.String()
 		}
+		setIPv6(&n)
 		if in.MatchMAC != "" {
 			n.MAC = in.MatchMAC
 			if err := add("etc/systemd/network/10-rollgate-"+in.Name+".link", "link.tmpl", n); err != nil {
@@ -94,6 +145,7 @@ func Compile(c *config.Config, source []byte, sourceName string) (Files, error) 
 		if v.Addr.IsValid() {
 			n.Addr = v.Addr.String()
 		}
+		setIPv6(&n)
 		if err := add("etc/systemd/network/20-rollgate-"+v.Name+".netdev", "netdev.tmpl", n); err != nil {
 			return nil, err
 		}

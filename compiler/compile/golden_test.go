@@ -43,6 +43,9 @@ func TestGolden(t *testing.T) {
 			if err != nil {
 				t.Fatalf("router.toml is invalid:\n%v", err)
 			}
+			if !c.IPv6.ULA.IsValid() {
+				c.IPv6.ULA = testULA // stands in for the stored or generated prefix
+			}
 			files, err := Compile(c, source, "router.toml")
 			if err != nil {
 				t.Fatal(err)

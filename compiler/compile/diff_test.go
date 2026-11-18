@@ -33,6 +33,7 @@ func TestCompare(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	c.IPv6.ULA = testULA
 	files, err := Compile(c, source, "router.toml")
 	if err != nil {
 		t.Fatal(err)
