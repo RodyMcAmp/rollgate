@@ -107,15 +107,17 @@ After a rollback, `rollgate` offers to re-apply the newest config if it validate
 
 ### Update flow (`rollgate update`, M4)
 
-1. Read the target release date (the newest date published by the release train, or one the user gives).
-2. Create a new writable snapshot of the current root.
-3. Inside that snapshot (`arch-chroot`): point pacman at the target date's archive and run `pacman -Syu`.
+Mechanics in ADR 0011 *(proposed)*; publishing and signing in ADR 0012 *(proposed)*.
+
+1. Read the target release date: the newest `current` date in the signed `releases.json`, or one the user gives.
+2. Create `@next`, a writable snapshot of the running root `@`.
+3. Inside `@next` (`arch-chroot`): point pacman at the target date's archive and run `pacman -Syu`.
    This regenerates the initramfs for both `linux` and `linux-lts`.
-4. Write a one-shot GRUB entry for the new snapshot and arm it with `grub-reboot`. The default entry stays on the old snapshot.
+4. Write a GRUB entry for `@next` and arm it once with `grub-reboot`. The default entry stays `@`.
 5. Reboot into the trial. The hardware watchdog is enabled (`RuntimeWatchdogSec=` in systemd, falling back to `softdog`).
-6. `rollgate-health.service` runs the health checks. If they pass, it makes the new snapshot the default.
-   If they fail, it reboots. If the system hangs, the watchdog reboots it.
-   Either way GRUB falls back to the old default.
+6. `rollgate-health.service` runs the health checks. If they pass within 5 minutes, it promotes the trial by renaming: `@` becomes `@previous`, `@next` becomes `@`.
+   If they fail, it reboots. If the system hangs or panics, the watchdog or `panic=10` reboots it.
+   GRUB consumed the one-shot choice, so every one of those reboots lands on the old `@`.
 
 The running system is never modified during an update, so a failed update leaves nothing half-finished.
 M1 ships a simpler interim mechanism: snap-pac pre/post snapshots, with rollback chosen by hand from grub-btrfs.
