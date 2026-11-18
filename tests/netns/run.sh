@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # L2 namespace test (docs/testing.md): compiles tests/netns/router.toml, loads the
 # generated nftables ruleset and sysctl settings into a "router" network namespace,
-# and sends real TCP connections between namespaces to check the firewall policy:
+# runs dnsmasq there with the generated config, and sends real traffic between
+# namespaces to check the firewall policy, NAT, DHCP and local DNS:
 #
 #   [rg-wan] ──veth── [rg-router] ──veth── [rg-lan]
 #   "internet"             │
@@ -23,7 +24,7 @@ die() { echo "netns-test: FAIL: $*" >&2; exit 1; }
 log() { echo "==> $*"; }
 
 [[ $EUID -eq 0 ]] || die "must run as root"
-for tool in ip nft sysctl go timeout; do
+for tool in ip nft sysctl go timeout dnsmasq unbound-checkconf; do
   command -v "$tool" >/dev/null || die "missing '$tool' (see docs/dev-setup.md)"
 done
 [[ -x $rollgate ]] || die "no rollgate binary at $rollgate (run: make rollgate)"
@@ -41,6 +42,11 @@ trap cleanup EXIT
 log "compiling tests/netns/router.toml"
 "$rollgate" compile -o "$work/out" "$here/router.toml" >/dev/null
 go build -o "$work/listen" "$here/listen.go"
+go build -o "$work/probe" "$here/probe.go"
+
+log "checking the generated DNS configs with the daemons' own checkers"
+dnsmasq --test --conf-file="$work/out/etc/dnsmasq.conf"
+unbound-checkconf "$work/out/etc/unbound/unbound.conf"
 
 log "building the namespaces"
 for ns in "${namespaces[@]}"; do
@@ -89,6 +95,14 @@ log "loading the generated sysctl settings and firewall into the router namespac
 ip netns exec rg-router sysctl -q -p "$work/out/etc/sysctl.d/90-rollgate.conf"
 ip netns exec rg-router nft -f "$work/out/etc/nftables.conf"
 
+log "starting dnsmasq with the generated config"
+# Only the lease, pid and log files move into the test directory, and it runs as
+# root so it can write them; everything else comes from the generated file.
+ip netns exec rg-router dnsmasq --conf-file="$work/out/etc/dnsmasq.conf" --keep-in-foreground \
+  --user=root --group=root --pid-file="$work/dnsmasq.pid" --dhcp-leasefile="$work/leases" \
+  --log-facility="$work/dnsmasq.log" &
+pids+=($!)
+
 # listen <namespace> <port>: starts a TCP listener; peers are logged to $work/<ns>-<port>.log
 listen() {
   ip netns exec "$1" "$work/listen" "$2" "$work/$1-$2.log" &
@@ -97,8 +111,7 @@ listen() {
 listen rg-wan 80     # a web server on the internet
 listen rg-lan 80     # a server on the LAN (also the port forward's target)
 listen rg-iot 80     # a device in the IoT zone
-listen rg-router 22  # stands in for sshd on the router
-listen rg-router 53  # stands in for DNS on the router
+listen rg-router 22  # stands in for sshd on the router (DNS on port 53 is the real dnsmasq)
 sleep 1
 
 failures=0
@@ -159,5 +172,34 @@ expect blocked "WAN can't reach a LAN device directly (IPv4)"     rg-wan 192.168
 expect blocked "WAN can't reach a LAN device directly (IPv6)"     rg-wan fd00:10::50 80
 expect blocked "WAN can't reach an IoT device directly (IPv6)"    rg-wan fd00:20::50 80
 
-((failures == 0)) || die "$failures check(s) failed"
-log "PASS: firewall policy, NAT and port forward behave as configured"
+log "checking DHCP and local DNS (dnsmasq)"
+# check <description> <expected output as a glob pattern, or "" to expect no answer>
+#       <namespace> <probe args...>
+check() {
+  local what=$1 want=$2 ns=$3 got
+  shift 3
+  got=$(ip netns exec "$ns" "$work/probe" "$@" 2>/dev/null | tr '\n' ' ' | sed 's/ $//') || got=""
+  # shellcheck disable=SC2053 # $want is a pattern on purpose
+  if [[ $got == $want ]]; then
+    echo "    ok    $what${got:+ ($got)}"
+  else
+    echo "    WRONG $what: expected '${want:-no answer}', got '${got:-no answer}'"
+    failures=$((failures + 1))
+  fi
+}
+check "LAN device with a static lease gets its fixed address" \
+  "address=192.168.10.5 router=192.168.10.1 dns=192.168.10.1" rg-lan dhcp 00:00:5e:00:53:10
+check "IoT device gets an address from the IoT range" \
+  "address=192.168.20.1[0-9][0-9] router=192.168.20.1 dns=192.168.20.1" rg-iot dhcp 00:00:5e:00:53:20
+check "No DHCP on the internet side" "" rg-wan dhcp 00:00:5e:00:53:30
+check "The router's name resolves on the LAN"     "192.168.10.1" rg-lan dns 192.168.10.1 gateway.home.arpa
+check "The router's name resolves on IoT"         "192.168.20.1" rg-iot dns 192.168.20.1 gateway.home.arpa
+check "A DHCP device's name resolves"             "192.168.10.5" rg-lan dns 192.168.10.1 nas.home.arpa
+check "No DNS for the internet side"              "" rg-wan dns 203.0.113.2 gateway.home.arpa
+
+if ((failures > 0)); then
+  echo "--- dnsmasq log:"
+  cat "$work/dnsmasq.log" || true
+  die "$failures check(s) failed"
+fi
+log "PASS: firewall, NAT, port forward, DHCP and local DNS behave as configured"

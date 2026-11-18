@@ -80,8 +80,11 @@ There are no per-interface IPv6 settings. IPv6 is handled automatically by `syst
 | Key | Type | Default | Notes |
 |---|---|---|---|
 | `mode` | string | `"recursive"` | `"recursive"` (Unbound resolves from the root servers) or `"forward"` |
-| `forwarders` | array of strings | — | required when `mode = "forward"`. Each is `"ip"` or `"ip@port#tls-name"` for DNS over TLS. |
+| `forwarders` | array of strings | — | required when `mode = "forward"`. Each is `"ip"`, `"ip@port"`, or `"ip@port#tls-name"` for DNS over TLS. Either all forwarders use TLS or none do. |
 | `blocklists` | array of URLs | `[]` | domain blocklists fetched on a timer *(planned, M6)*. Until then a non-empty list is rejected, so it can't silently do nothing. |
+
+Local names: devices that get an address from the router's DHCP are reachable as `<their hostname>.<domain>` (for example `nas.home.arpa`), and the router itself as `<hostname>.<domain>` (`gateway.home.arpa`), from every zone with a `[dhcp.<name>]` section.
+Names in `<domain>` are never sent to the internet.
 
 ## `[firewall]`
 

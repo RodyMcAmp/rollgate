@@ -1,0 +1,21 @@
+# Golden case: DNS forwarded over TLS, a custom hostname and domain, and a LAN
+# without DHCP (so dnsmasq listens on loopback only and serves no DHCP).
+schema_version = 1
+
+[system]
+hostname = "edge"
+domain = "lab.example"
+
+[[interface]]
+name = "wan"
+match_device = "eth0"
+ipv4 = "dhcp"
+
+[[interface]]
+name = "lan"
+match_device = "eth1"
+ipv4 = "10.10.0.1/16"
+
+[dns]
+mode = "forward"
+forwarders = ["9.9.9.9@853#dns.quad9.net", "149.112.112.112@853#dns.quad9.net"]

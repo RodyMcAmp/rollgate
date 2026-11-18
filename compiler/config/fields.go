@@ -243,10 +243,18 @@ func validateDNS(ps *problems, d *DNS) {
 	default:
 		ps.add(CodeInvalid, "dns.mode", "must be \"recursive\" or \"forward\", not %q", d.Mode)
 	}
+	tls := 0
 	for _, f := range d.Forwarders {
 		if !validForwarder(f) {
 			ps.add(CodeInvalid, "dns.forwarders", "%q should be an IP address, optionally with a port and TLS name: \"9.9.9.9@853#dns.quad9.net\"", f)
 		}
+		if strings.Contains(f, "#") {
+			tls++
+		}
+	}
+	// Unbound switches TLS on or off for all forwarders together.
+	if tls > 0 && tls < len(d.Forwarders) {
+		ps.add(CodeInvalid, "dns.forwarders", "either all forwarders use DNS over TLS (\"ip@853#name\") or none do")
 	}
 	if len(d.Blocklists) > 0 {
 		ps.add(CodeInvalid, "dns.blocklists", "blocklists aren't supported yet (planned for M6); remove this setting for now")

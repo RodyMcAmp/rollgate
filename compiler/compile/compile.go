@@ -117,6 +117,12 @@ func Compile(c *config.Config, source []byte, sourceName string) (Files, error) 
 	if err := add("etc/nftables.conf", "nftables.tmpl", fw); err != nil {
 		return nil, err
 	}
+	if err := add("etc/dnsmasq.conf", "dnsmasq.tmpl", buildDNSMasq(c, header)); err != nil {
+		return nil, err
+	}
+	if err := add("etc/unbound/unbound.conf", "unbound.tmpl", buildUnbound(c, header)); err != nil {
+		return nil, err
+	}
 	return files, nil
 }
 
