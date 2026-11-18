@@ -48,7 +48,8 @@ jobs:
           pacman-key --init
           pacman-key --populate archlinux
           pacman -Syu --noconfirm --needed make arch-install-scripts btrfs-progs \
-            dosfstools gptfdisk grub qemu-system-x86 edk2-ovmf openssh go
+            dosfstools gptfdisk grub qemu-system-x86 edk2-ovmf openssh go \
+            iproute2 iputils dnsmasq
       # The pinned snapshot's packages never change, so keep them between runs
       # instead of downloading ~625 MB from archive.archlinux.org every time.
       # pacman still checks every package's signature when installing.
@@ -64,6 +65,8 @@ jobs:
         run: make test-vm
       - name: L3 apply test
         run: make test-apply
+      - name: L3 IPv6 test
+        run: make test-ipv6
       - name: L3 rollback rehearsal
         run: make test-rollback
       - name: Keep serial logs

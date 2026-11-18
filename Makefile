@@ -8,11 +8,11 @@ IMAGE := $(BUILD_DIR)/rollgate-$(SNAPSHOT_DATE).img
 SUDO := $(if $(filter 0,$(shell id -u)),,sudo)
 
 SHELL_SCRIPTS := image/build.sh tests/vm/boot-test.sh tests/vm/rollback-test.sh \
-	tests/vm/apply-test.sh tests/netns/run.sh \
+	tests/vm/apply-test.sh tests/vm/ipv6-test.sh tests/netns/run.sh \
 	image/rootfs/usr/local/sbin/rollgate-snapshot-rollback \
 	image/rootfs/usr/local/lib/rollgate/boot-report
 
-.PHONY: check golden-update rollgate test-netns image test-vm test-apply test-rollback clean
+.PHONY: check golden-update rollgate test-netns image test-vm test-apply test-ipv6 test-rollback clean
 
 ## L0 + L1: shell lint, Go format/vet/lint/tests, and the example config validates.
 ## Run before every commit.
@@ -22,7 +22,8 @@ check:
 	  if [ -n "$$unformatted" ]; then echo "gofmt needed: $$unformatted"; exit 1; fi
 	cd compiler && go vet ./... && staticcheck ./... && go test ./...
 	cd compiler && go run ./cmd/rollgate validate ../examples/router.toml
-	cd compiler && for f in ../tests/vm/apply/*.toml; do go run ./cmd/rollgate validate "$$f" || exit 1; done
+	cd compiler && for f in ../tests/vm/apply/*.toml ../tests/vm/ipv6/*.toml; do go run ./cmd/rollgate validate "$$f" || exit 1; done
+	cd compiler && for f in ../tests/netns/*.go ../tests/vm/*.go; do go vet "$$f" || exit 1; done
 
 ## Rewrite tests/golden/*/expected and schema/router.schema.json from the compiler.
 ## Review the diff before committing; never run this just to make a failing test pass.
@@ -52,6 +53,11 @@ test-vm:
 ## config that locks out SSH reverts by itself, by the timer and across a power cut.
 test-apply:
 	$(SUDO) LOG_DIR=$(BUILD_DIR)/test-logs bash tests/vm/apply-test.sh $(IMAGE)
+
+## L3: ipv6 = "auto" in a VM, with a fake ISP and a LAN client: local IPv6 when the
+## ISP has none, public IPv6 by prefix delegation once it does (ADR 0008).
+test-ipv6:
+	$(SUDO) LOG_DIR=$(BUILD_DIR)/test-logs bash tests/vm/ipv6-test.sh $(IMAGE)
 
 ## L3: rollback rehearsal following docs/runbooks/recovery.md.
 test-rollback:
