@@ -6,7 +6,7 @@ Each milestone ends with something you can run and tests that prove it works.
 
 Architecture, config spec draft, ADRs 0001–0008, the agent and contributor process.
 
-## M1 — Bootable image 🚧 (builds, boots and rolls back locally; CI not run yet)
+## M1 — Bootable image ✅ (2026-11-18)
 
 - `image/build.sh` (ADR 0009): Arch at a pinned date, Btrfs layout from ADR 0004, GRUB on the ESP, `linux` + `linux-lts`, snapper + snap-pac + grub-btrfs, sshd (keys only), placeholder networking and firewall.
 - `make image`, `make test-vm` (boot test: both kernels reach a clean `running` state under UEFI).
@@ -17,7 +17,8 @@ Architecture, config spec draft, ADRs 0001–0008, the agent and contributor pro
   Both kernels (7.3.4, 6.18.63-lts) reach `running` with no failed units in about 5 s after the kernel starts.
 - Rollback rehearsal verified the same day: `make test-rollback` passes (4 boots: fresh → pre-update snapshot with its own linux-lts → rollback → restored linux-lts).
   It found and fixed two bugs: an expired root password blocked SSH key logins, and snapshot boots came up "degraded" (systemd-remount-fs on the overlay).
-- Still to do: first CI run (needs the repo on GitHub).
+- CI green on GitHub 2026-11-18 (L0, image build, `make test-vm`, `make test-rollback`; build + tests about 5 minutes).
+  The first run found two more issues, both fixed: a gpg-agent left by `pacstrap -K` kept the target busy in the container, and GRUB 2.16 copied the runner's firmware boot entries into the menu.
 
 ## M2 — Compiler v0
 

@@ -11,8 +11,9 @@ and for humans who want the short version. Read this whole file before changing 
 dnsmasq, Unbound). Packages come from Arch's stable repos, pinned to a dated snapshot
 that has passed our test suite. Every update can be rolled back from the boot menu.
 
-Status: **M1 (bootable image) builds and passes the L3 boot test and rollback rehearsal
-locally** (WSL2, Arch snapshot 2026-11-16). CI hasn't run yet because the repo isn't on GitHub. Anything marked
+Status: **M1 (bootable image) is done**: the image builds and passes the L3 boot test and
+rollback rehearsal in CI (Arch snapshot 2026-11-16). It is not a router yet; that starts
+with M2 (the config compiler). Anything marked
 *(planned)* doesn't exist until the milestone in `docs/roadmap.md` delivers it.
 
 ## Hard rules (never break these)
