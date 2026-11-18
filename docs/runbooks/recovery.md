@@ -13,14 +13,15 @@ You need physical access: a monitor and keyboard plugged into the router, or a s
 ## 1. Internet stopped working right after I changed a setting
 
 **Wait for the confirm timeout** (default 2 minutes). If you didn't run `rollgate confirm`, the router restores the previous settings by itself.
-Rebooting the router (power off, wait 10 seconds, power on) also restores them: an unconfirmed change never survives a reboot *(planned, M3)*.
+Rebooting the router (power off, wait 10 seconds, power on) also restores them: an unconfirmed change never survives a reboot.
 
-To undo an unconfirmed change at once, log in at the console and run `rollgate revert` *(planned)*.
+To undo an unconfirmed change at once, log in at the console and run `rollgate revert`.
 
 Still broken after 5 minutes? Log in at the console and run:
 
 ```
-rollgate rollback-config          (planned) restores the previous working settings
+rollgate rollback-config          puts the previous working settings back
+rollgate confirm                  keeps them (the console may always confirm)
 ```
 
 ## 2. Internet stopped working right after an update
@@ -58,7 +59,7 @@ This exact sequence is tested automatically on every release (`make test-rollbac
 
 1. Make sure you have a backup of `/etc/rollgate/` (`router.toml` and `secrets/`).
 2. Reinstall from the USB installer.
-3. Copy your `/etc/rollgate/` back, then run `rollgate apply` and `rollgate confirm` *(planned)*.
+3. Copy your `/etc/rollgate/` back, then run `rollgate apply` and `rollgate confirm`.
 
 ---
 
@@ -72,4 +73,4 @@ This exact sequence is tested automatically on every release (`make test-rollbac
 | `journalctl -b -p err` | Errors since this boot |
 | `nft list ruleset \| less` | The firewall rules that are actually loaded |
 | `snapper list` | Snapshots and their numbers |
-| `rollgate status` *(planned)* | All of the above, summarized |
+| `rollgate status` | Which settings are running, whether a change is waiting for `rollgate confirm`, and the recent history |

@@ -226,10 +226,11 @@ const (
 
 // Revert restores the generation before the pending one.
 //
-// At boot (rollgate-boot.service runs before udev applies .link files and
-// before sysctl, nftables, networkd and the services start) it only puts the
-// files back and adjusts which services are enabled; everything else then
-// starts from the restored files by itself.
+// At boot (rollgate-boot.service runs before nftables, networkd and the
+// services start) it puts the files back, re-applies port renames if .link
+// files changed (udev named the ports before /var/lib/rollgate was mounted),
+// and adjusts which services are enabled; everything else then starts from
+// the restored files by itself.
 func Revert(s System, mode Mode) error {
 	unlock, err := s.lock()
 	if err != nil {
@@ -296,13 +297,17 @@ func (s System) revert(n int, atBoot bool) error {
 	return nil
 }
 
-// bootPlan keeps only the enable/disable part of a reload plan, without
-// waiting for jobs: a unit ordered before the services can't wait for them
-// to start or stop. A disable also cancels the service's start in this boot.
+// bootPlan keeps the parts of a reload plan that matter before the services
+// start: udev renames (networkd hasn't brought any port up yet, so renaming
+// is safe) and enable/disable, without waiting for jobs, since a unit
+// ordered before the services can't wait for them to start or stop. A
+// disable also cancels the service's start in this boot.
 func bootPlan(plan [][]string) [][]string {
 	var out [][]string
 	for _, cmd := range plan {
 		switch {
+		case cmd[0] == "udevadm":
+			out = append(out, cmd)
 		case slices.Equal(cmd[:2], []string{"systemctl", "enable"}):
 			out = append(out, cmd)
 		case len(cmd) == 4 && slices.Equal(cmd[:3], []string{"systemctl", "disable", "--now"}):

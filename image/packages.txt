@@ -22,9 +22,12 @@ inotify-tools
 snapper
 snap-pac
 
-# Networking (ADR 0006). dnsmasq and unbound arrive with the compiler in M2.
+# Networking (ADR 0006). dnsmasq and unbound stay disabled until `rollgate apply`
+# enables them with a generated config.
 nftables
 openssh
+dnsmasq
+unbound
 
 # Console troubleshooting (docs/runbooks/recovery.md)
 ethtool

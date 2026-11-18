@@ -1,0 +1,25 @@
+# Reverts a config change that was never confirmed (ADR 0010). It runs only when a
+# change is pending, before networking, the firewall and the services start, so an
+# unconfirmed change never survives a reboot.
+#
+# Not ordered before udev's coldplug or systemd-sysctl: /var/lib/rollgate is mounted
+# after those run. `rollgate revert --boot` re-applies port renames itself when it
+# restores .link files. Forwarding settings from the reverted change can stay in
+# effect until the next reboot; both the image's firewall and rollgate's drop
+# forwarded traffic by default.
+[Unit]
+Description=rollgate: revert a config change that was never confirmed
+DefaultDependencies=no
+RequiresMountsFor=/var/lib/rollgate
+ConditionPathExists=/var/lib/rollgate/pending
+Before=sysinit.target nftables.service systemd-networkd.service dnsmasq.service unbound.service sshd.service
+Conflicts=shutdown.target
+Before=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/rollgate revert --boot
+
+[Install]
+WantedBy=sysinit.target

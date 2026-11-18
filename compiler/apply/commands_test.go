@@ -217,8 +217,13 @@ func TestRevertAtBoot(t *testing.T) {
 	if got := systemFiles(t, s.Root); !maps.Equal(got, placeholders) {
 		t.Errorf("boot revert left:\n%v", got)
 	}
-	// Only enable/disable, without waiting: nothing else runs this early.
-	want := []string{"systemctl disable --now --no-block unbound.service", "systemctl disable --now --no-block dnsmasq.service"}
+	// The example renames ports by MAC (.link files), so udev re-applies names
+	// from the restored files. Then only enable/disable, without waiting:
+	// nothing else runs this early (no nft, sysctl or networkctl).
+	want := []string{
+		"udevadm control --reload", "udevadm trigger --action=add --subsystem-match=net", "udevadm settle",
+		"systemctl disable --now --no-block unbound.service", "systemctl disable --now --no-block dnsmasq.service",
+	}
 	if got := planStrings(r.calls); !slices.Equal(got, want) {
 		t.Errorf("boot revert ran %q, want %q", got, want)
 	}

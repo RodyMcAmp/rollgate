@@ -85,7 +85,7 @@ The commit-confirm flow (ADR 0010; `rollgate apply`, `confirm` and `revert`) gua
 3. Install the files and reload only the services whose files changed.
 4. The user runs `rollgate confirm` over a **new** connection, which proves access still works. `confirm` refuses to run from the connection that ran `apply`.
 5. If no one confirms in time, the previous generation is restored and the affected services are reloaded.
-   If the router reboots during the window, `rollgate-boot.service` *(planned, M3 step 5)* runs `rollgate revert --boot` before udev, sysctl, nftables, networkd and the services start. It restores the previous generation's files, so everything then starts from them.
+   If the router reboots during the window, `rollgate-boot.service` runs `rollgate revert --boot` before nftables, networkd and the services start, and re-applies port renames if needed. It restores the previous generation's files, so everything then starts from them.
 
 Changes that cannot affect reachability (a DNS blocklist, for example) still use this flow. One code path is easier to test than two.
 

@@ -40,8 +40,8 @@ test-netns: rollgate
 	$(SUDO) ROLLGATE=$(BUILD_DIR)/rollgate bash tests/netns/run.sh
 
 ## Build the disk image at the date in image/snapshot-date.
-image:
-	$(SUDO) BUILD_DIR=$(BUILD_DIR) bash image/build.sh
+image: rollgate
+	$(SUDO) BUILD_DIR=$(BUILD_DIR) ROLLGATE=$(abspath $(BUILD_DIR)/rollgate) bash image/build.sh
 
 ## L3: boot the image in QEMU with both kernels.
 test-vm:

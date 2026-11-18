@@ -48,8 +48,8 @@ The image is built by `image/build.sh` with the standard Arch tools (`pacstrap`,
 image/
   build.sh          the build: filesystems, pacstrap, chroot configuration, disk assembly
   packages.txt      every package in the image (stable repos only)
-  rootfs/           files copied verbatim into the image (GRUB defaults, initramfs hooks,
-                    sshd, nftables and networkd placeholders, systemd units, scripts)
+  rootfs/           files copied verbatim into the image (GRUB defaults, initramfs hooks, the
+                    sshd, nftables and networkd defaults until the first `rollgate apply`, units, scripts)
   snapshot-date     the pinned date
   authorized_keys   (optional, not committed) your SSH public key for test images
 ```
