@@ -71,19 +71,21 @@ router.toml ──validate──▶ typed config ──compile──▶ staging 
 
 ### Generations
 
-Every successful apply stores the compiled file set in `/var/lib/rollgate/generations/<N>/` along with the `router.toml` that produced it.
-`/etc/rollgate` is a git repository, and each apply is a commit.
-`rollgate rollback-config [N]` *(planned)* restores an earlier generation.
+Every apply *(planned, M3)* stores the compiled file set in `/var/lib/rollgate/generations/<N>/` along with the `router.toml` that produced it (ADR 0010).
+These generations are the config history; there is no git repository.
+Generation 0 is a copy of whatever was installed before the first apply, so even the first apply can be reverted.
+`rollgate rollback-config [N]` *(planned)* puts an earlier generation's `router.toml` back and applies it.
 
 ## Safe apply
 
-The commit-confirm flow guards against changes that cut off the person making them:
+The commit-confirm flow *(planned, M3; ADR 0010)* guards against changes that cut off the person making them:
 
-1. Run `nft -c -f` on the new ruleset and the equivalent checks for every other output. Any failure stops the apply and changes nothing.
-2. Install the new generation and reload only the services whose files changed.
-3. Start a revert timer (`management.confirm_timeout_seconds`, default 120 s).
-4. The user runs `rollgate confirm` *(planned)* over a **new** connection, which proves access still works.
+1. Validate, compile, and check the result with each program's own checker (`nft -c -f`, `dnsmasq --test`, `unbound-checkconf`, `sshd -t`), plus that every referenced secret file exists. Any failure stops the apply and changes nothing.
+2. Store the new generation as pending and start a revert timer (`management.confirm_timeout_seconds`, default 120 s). The timer is a systemd timer, so it fires even if the SSH session that ran `apply` is gone.
+3. Install the files and reload only the services whose files changed.
+4. The user runs `rollgate confirm` over a **new** connection, which proves access still works. `confirm` refuses to run from the connection that ran `apply`.
 5. If no one confirms in time, the previous generation is restored and the affected services are reloaded.
+   If the router reboots during the window, `rollgate-boot.service` restores the previous generation before networking starts.
 
 Changes that cannot affect reachability (a DNS blocklist, for example) still use this flow. One code path is easier to test than two.
 

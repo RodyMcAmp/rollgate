@@ -13,6 +13,9 @@ You need physical access: a monitor and keyboard plugged into the router, or a s
 ## 1. Internet stopped working right after I changed a setting
 
 **Wait for the confirm timeout** (default 2 minutes). If you didn't run `rollgate confirm`, the router restores the previous settings by itself.
+Rebooting the router (power off, wait 10 seconds, power on) also restores them: an unconfirmed change never survives a reboot *(planned, M3)*.
+
+To undo an unconfirmed change at once, log in at the console and run `rollgate revert` *(planned)*.
 
 Still broken after 5 minutes? Log in at the console and run:
 
