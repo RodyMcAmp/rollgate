@@ -34,8 +34,9 @@ Architecture, config spec draft, ADRs 0001–0008, the agent and contributor pro
 
 ## M3 — Safe apply
 
-- `apply`, `confirm`, `rollback-config`. Generations in `/var/lib/rollgate`, git history in `/etc/rollgate`.
-- L3: apply a config that cuts off management, don't confirm, and verify access returns by itself.
+- `apply`, `confirm`, `revert`, `status`, `rollback-config` (ADR 0010). Generations in `/var/lib/rollgate`.
+- The image ships `rollgate`, dnsmasq and Unbound, and runs the compiled configs once a `router.toml` is applied.
+- L3: apply a config that cuts off management, don't confirm, and verify access returns by itself. The same after a reboot during the confirm window. Router advertisements and prefix delegation against a fake ISP.
 - Done when: it is impossible to lock yourself out through `rollgate apply`.
 
 ## M4 — Updates and rollback
