@@ -23,7 +23,7 @@ import (
 // "etc/sysctl.d/90-rollgate.conf") to the file's content.
 type Files map[string][]byte
 
-var tmpl = template.Must(template.New("").Option("missingkey=error").ParseFS(templates.FS, "*.tmpl"))
+var tmpl = template.Must(template.New("").Funcs(funcs).Option("missingkey=error").ParseFS(templates.FS, "*.tmpl"))
 
 // network is the template data for one interface or VLAN.
 type network struct {
@@ -107,6 +107,14 @@ func Compile(c *config.Config, source []byte, sourceName string) (Files, error) 
 		IPv6Off bool
 	}{header, ipv6Off}
 	if err := add("etc/sysctl.d/90-rollgate.conf", "sysctl.tmpl", sysctl); err != nil {
+		return nil, err
+	}
+
+	fw, err := buildFirewall(c, header)
+	if err != nil {
+		return nil, err
+	}
+	if err := add("etc/nftables.conf", "nftables.tmpl", fw); err != nil {
 		return nil, err
 	}
 	return files, nil

@@ -1,0 +1,45 @@
+# Config for the L2 namespace test (tests/netns/run.sh). The device names are the
+# veth interfaces the test creates in the router namespace.
+schema_version = 1
+
+[[interface]]
+name = "wan"
+match_device = "wan"
+ipv4 = "dhcp"   # the test gives it 203.0.113.2/24, as an ISP's DHCP server would
+
+[[interface]]
+name = "lan"
+match_device = "lan"
+ipv4 = "192.168.10.1/24"
+
+[[interface]]
+name = "iot"
+match_device = "iot"
+ipv4 = "192.168.20.1/24"
+
+[dhcp.lan]
+range = ["192.168.10.100", "192.168.10.199"]
+
+[dhcp.iot]
+range = ["192.168.20.100", "192.168.20.199"]
+
+[[firewall.policy]]
+from = "lan"
+to = "*"
+action = "accept"
+
+[[firewall.policy]]
+from = "iot"
+to = "wan"
+action = "accept"
+
+[[firewall.policy]]
+from = "*"
+to = "*"
+action = "drop"
+
+[[firewall.port_forward]]
+name = "web server"
+protocol = "tcp"
+wan_port = 8080
+to = "192.168.10.50:80"

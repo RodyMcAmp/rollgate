@@ -143,6 +143,9 @@ func TestProblems(t *testing.T) {
 
 		{"policy action", base + "[[firewall.policy]]\nfrom = \"lan\"\nto = \"*\"\naction = \"allow\"\n", []string{"E009 firewall.policy #1 action"}},
 		{"policy without from", base + "[[firewall.policy]]\nto = \"*\"\naction = \"drop\"\n", []string{"E010 firewall.policy #1 from"}},
+		{"accept from wan", base + "[[firewall.policy]]\nfrom = \"wan\"\nto = \"lan\"\naction = \"accept\"\n", []string{"E009 firewall.policy #1 from"}},
+		{"drop from wan is fine", base + "[[firewall.policy]]\nfrom = \"wan\"\nto = \"*\"\naction = \"drop\"\n", nil},
+		{"port range to other port", base + pf(`wan_port = "8000-8010"`, `to = "192.168.10.50:9000"`), []string{`E006 firewall.port_forward "web" to`}},
 
 		{"port out of range", base + pf(`wan_port = 70000`, `to = "192.168.10.50:80"`), []string{`E009 firewall.port_forward "web" wan_port`}},
 		{"port range reversed", base + pf(`wan_port = "100-50"`, `to = "192.168.10.50:80"`), []string{`E009 firewall.port_forward "web" wan_port`}},
@@ -185,7 +188,7 @@ func TestProblems(t *testing.T) {
 		{"forward to the router", base + pf(`wan_port = 80`, `to = "192.168.10.1:80"`), []string{`E006 firewall.port_forward "web" to`}},
 		{"forward to the internet", base + pf(`wan_port = 80`, `to = "8.8.8.8:80"`), []string{`E006 firewall.port_forward "web" to`}},
 		{"port claimed twice", base + pf(`wan_port = 80`, `to = "192.168.10.50:80"`) +
-			"[[firewall.port_forward]]\nname = \"web2\"\nprotocol = \"tcp+udp\"\nwan_port = \"70-90\"\nto = \"192.168.10.51:80\"\n",
+			"[[firewall.port_forward]]\nname = \"web2\"\nprotocol = \"tcp+udp\"\nwan_port = \"70-90\"\nto = \"192.168.10.51:70\"\n",
 			[]string{`E006 firewall.port_forward "web2" wan_port`}},
 		{"same port, other protocol", base + pf(`wan_port = 53`, `to = "192.168.10.50:53"`) +
 			"[[firewall.port_forward]]\nname = \"dns\"\nprotocol = \"udp\"\nwan_port = 53\nto = \"192.168.10.50:53\"\n", nil},

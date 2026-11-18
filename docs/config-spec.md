@@ -85,7 +85,7 @@ There are no per-interface IPv6 settings. IPv6 is handled automatically by `syst
 
 ## `[firewall]`
 
-Inbound traffic from `wan` to the router is always dropped, apart from replies to established connections and rate-limited ICMP. **This default cannot be changed.**
+Inbound traffic from `wan` is always dropped, both to the router and through it. The only ways in are replies to connections started from inside, port forwards, rate-limited ICMP, and the IPv6 control messages an internet connection needs (see below). **This default cannot be changed** (AGENTS.md hard rule 5).
 
 | Key | Type | Default | Notes |
 |---|---|---|---|
@@ -95,16 +95,25 @@ Inbound traffic from `wan` to the router is always dropped, apart from replies t
 Default policy when no `[[firewall.policy]]` is given: every non-WAN zone may reach `wan`. Everything else is dropped.
 
 `[[firewall.policy]]`: `from` (zone or `"*"`), `to` (zone or `"*"`), `action` (`"accept"` / `"drop"` / `"reject"`), optional `comment`.
+- `from = "*"` means every zone **except `wan`**. `to = "*"` means every zone, including `wan`.
+- A rule that accepts traffic `from = "wan"` is rejected (`E009`): use a port forward to let something in. `drop` and `reject` rules from `wan` are allowed but change nothing, since that traffic is dropped anyway.
+- Traffic that matches no rule is dropped.
 
 `[[firewall.port_forward]]`: `name`, `protocol` (`"tcp"` / `"udp"` / `"tcp+udp"`), `wan_port` (integer or `"start-end"`), `to` (`"ip:port"`, must be inside a non-WAN zone's subnet).
+For a port range, `to` must use the range's first port; every port in the range goes to the same port on the device (`"27015-27030"` to `"192.168.10.50:27015"` forwards 27015→27015, 27016→27016, and so on).
+A port forward lets the traffic through the firewall by itself; no `[[firewall.policy]]` rule is needed.
 
-NAT: masquerade from every non-WAN zone to `wan` is generated automatically.
+NAT: IPv4 traffic leaving through `wan` is masqueraded (gets the router's WAN address). IPv6 is never NATed.
 
 Traffic to the router itself (input), as opposed to traffic passing through it:
-- DHCP and DNS are allowed from every zone that has a `[dhcp.<name>]` section.
+- DHCP and DNS are allowed from every interface or VLAN that has a `[dhcp.<name>]` section.
 - SSH and the web UI are allowed only from `management.allowed_zones`.
+- ICMP (ping and error messages) is allowed from every zone, rate-limited.
+- IPv6 neighbor discovery and router solicitations are allowed from every zone. From `wan`, router advertisements and DHCPv6 replies from the ISP's link-local address are allowed, so IPv6 internet can work (`ipv6 = "auto"`).
 - Everything else to the router is dropped.
 `[[firewall.policy]]` rules govern forwarding only. They never open services on the router.
+
+The compiler writes the whole ruleset to `/etc/nftables.conf` as one `inet` table, so IPv4 and IPv6 get the same policy (ADR 0006).
 
 ## Advanced (rarely needed)
 
@@ -128,10 +137,10 @@ Each problem has a stable error code, so docs, tests and agents can refer to it.
 | `E003` | Every zone or interface named in `management`, `firewall.policy`, `dhcp` or a VLAN's `parent` exists. |
 | `E004` | Management is reachable: at least one zone in `allowed_zones` has an interface with a static address. |
 | `E005` | DHCP is served only on non-WAN interfaces and VLANs with a static address. Ranges and static leases lie inside that subnet and don't collide with each other or with the router's address. |
-| `E006` | Port forward targets lie inside a non-WAN subnet and aren't the router itself. Two port forwards can't claim the same WAN port and protocol. |
+| `E006` | Port forward targets lie inside a non-WAN subnet and aren't the router itself. Two port forwards can't claim the same WAN port and protocol. For a port range, `to` uses the range's first port. |
 | `E007` | Unknown keys are errors, not warnings, so typos can't silently do nothing. |
 | `E008` | `ipv6.ula_prefix`, if set, is a /48 inside `fd00::/8`; `wan_prefix_hint` is 48–64; `ipv6_subnet_id` values are 0–255 and unique. |
-| `E009` | A value has the wrong format or is out of range (for example an address, a MAC, a port, or a choice such as `ipv6`). |
+| `E009` | A value has the wrong format or is out of range (for example an address, a MAC, a port, or a choice such as `ipv6`), or a firewall policy would accept traffic from `wan`. |
 | `E010` | A required key is missing. |
 | `E011` | A name or port is used twice (interfaces and VLANs, the same MAC or device matched by two interfaces, VLAN IDs on one parent, static leases, port forwards). |
 | `E012` | The file can't be read or isn't valid TOML (including a value of the wrong type, such as `id = "20"`). |

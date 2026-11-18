@@ -159,6 +159,10 @@ func validateFields(c *Config, md toml.MetaData, ps *problems) {
 		if p.Action != "accept" && p.Action != "drop" && p.Action != "reject" {
 			ps.add(CodeInvalid, path+" action", "must be \"accept\", \"drop\" or \"reject\", not %q", p.Action)
 		}
+		// AGENTS.md hard rule 5: WAN inbound is default-deny; only port forwards let traffic in.
+		if p.From == "wan" && p.Action == "accept" {
+			ps.add(CodeInvalid, path+" from", "accepting traffic from the internet would expose your network; use a [[firewall.port_forward]] to let a specific service in")
+		}
 	}
 
 	forwards := map[string]bool{}
@@ -277,7 +281,10 @@ func validatePortForward(ps *problems, i int, pf *PortForward, seen map[string]b
 	if pf.WANPort != nil && !ok {
 		ps.add(CodeInvalid, path+" wan_port", "must be a port 1–65535 such as 27015, or a range such as \"27015-27030\"")
 	}
-	pf.WANPortFirst, pf.WANPortLast = first, last
+	if ok {
+		// Left at 0 when invalid, so the rules in rules.go skip it.
+		pf.WANPortFirst, pf.WANPortLast = first, last
+	}
 	if pf.To == "" {
 		ps.add(CodeMissing, path+" to", "set where to send the traffic, as \"ip:port\", such as \"192.168.10.50:27015\"")
 	} else if t, err := netip.ParseAddrPort(pf.To); err != nil || !t.Addr().Is4() || t.Port() == 0 {

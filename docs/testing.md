@@ -33,16 +33,21 @@ An agent's claim that something works is not evidence. A passing test in CI is.
 
 ## Namespace tests (L2)
 
-Topology built with `ip netns`:
+`make test-netns` runs `tests/netns/run.sh`. Topology built with `ip netns`:
 
 ```
-[wan-ns] ──veth── [router-ns] ──veth── [lan-ns]
-                       └──────veth── [iot-ns]
+[rg-wan] ──veth── [rg-router] ──veth── [rg-lan]
+"internet"             └──────veth── [rg-iot]
 ```
 
-The generated nftables ruleset and addresses are loaded into `router-ns`.
-Tests send traffic with standard tools (`ping`, `nc`, `curl`, `nft monitor trace` for debugging) and check the outcomes.
+`tests/netns/router.toml` is compiled, and the generated nftables ruleset and sysctl settings are loaded into `rg-router`.
+Interface addresses are set by the script, standing in for networkd (L3 covers networkd itself from M3); the LAN addresses are read from the compiled `.network` files.
+Each check is a real TCP connection (bash's `/dev/tcp` as the client, `tests/netns/listen.go` as the server) with an expected outcome, open or blocked, over IPv4 and IPv6.
+The NAT check reads which address connections arrived from.
 No mocks: the kernel's own packet filter is under test.
+
+Before trusting a new check, make it fail: for example, replace the `nft -f` line with `nft flush ruleset` and confirm the blocked checks report `WRONG`.
+Debug with `ip netns exec rg-router nft monitor trace` after adding `meta nftrace set 1` to a rule.
 
 ## VM tests (L3/L4)
 
