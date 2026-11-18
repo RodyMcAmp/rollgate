@@ -27,8 +27,30 @@ var removable = []string{
 	"etc/systemd/network/*-rollgate-*.link",
 }
 
-// Compare reports how the files installed below root differ from f. Until M3
-// stores generations, the installed files are what the router is running.
+// Owned lists the installed files below root that match the removable
+// patterns, relative to root and sorted. Apply removes those the new
+// config doesn't produce.
+func Owned(root string) ([]string, error) {
+	var owned []string
+	for _, pattern := range removable {
+		matches, err := filepath.Glob(filepath.Join(root, filepath.FromSlash(pattern)))
+		if err != nil {
+			return nil, err
+		}
+		for _, m := range matches {
+			rel, err := filepath.Rel(root, m)
+			if err != nil {
+				return nil, err
+			}
+			owned = append(owned, filepath.ToSlash(rel))
+		}
+	}
+	slices.Sort(owned)
+	return owned, nil
+}
+
+// Compare reports how the files installed below root differ from f: what
+// the router is running against what installing f would give.
 func (f Files) Compare(root string) ([]Change, error) {
 	var changes []Change
 	for _, p := range f.Paths() {
@@ -42,24 +64,14 @@ func (f Files) Compare(root string) ([]Change, error) {
 			changes = append(changes, Change{p, "changed", unifiedDiff(p, installed, f[p])})
 		}
 	}
-	var stale []string
-	for _, pattern := range removable {
-		matches, err := filepath.Glob(filepath.Join(root, filepath.FromSlash(pattern)))
-		if err != nil {
-			return nil, err
-		}
-		for _, m := range matches {
-			rel, err := filepath.Rel(root, m)
-			if err != nil {
-				return nil, err
-			}
-			if rel = filepath.ToSlash(rel); f[rel] == nil {
-				stale = append(stale, rel)
-			}
-		}
+	owned, err := Owned(root)
+	if err != nil {
+		return nil, err
 	}
-	slices.Sort(stale)
-	for _, p := range stale {
+	for _, p := range owned {
+		if f[p] != nil {
+			continue
+		}
 		installed, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(p)))
 		if err != nil {
 			return nil, err
