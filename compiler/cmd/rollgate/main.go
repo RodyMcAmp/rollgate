@@ -9,6 +9,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/RodyMcAmp/rollgate/compiler/apply"
@@ -35,6 +37,10 @@ changing the router (as root; docs/architecture.md#safe-apply):
   confirm                  keep the applied config; run it from a NEW SSH connection
                            (or the console), which proves SSH still works
   revert                   undo an unconfirmed apply now
+  status                   what is running, what waits for confirmation, whether
+                           router.toml has changes that aren't applied
+  rollback-config [N]      put generation N's router.toml back (default: the
+                           confirmed one before the current) and apply it
 `
 
 func main() {
@@ -95,6 +101,35 @@ func run(args []string, stdout, stderr io.Writer) int {
 			return 2
 		}
 		return change("revert", func(s apply.System) error { return apply.Revert(s, mode) }, stdout, stderr)
+	case "status":
+		if len(args) > 1 {
+			fmt.Fprint(stderr, usage)
+			return 2
+		}
+		if err := apply.Status(system(stdout), strings.TrimPrefix(config.DefaultPath, "/")); err != nil {
+			fmt.Fprintf(stderr, "rollgate status: %v\n", err)
+			return 1
+		}
+		return 0
+	case "rollback-config":
+		n := apply.PreviousConfirmed
+		if len(args) == 2 {
+			var err error
+			if n, err = strconv.Atoi(args[1]); err != nil || n < 0 {
+				fmt.Fprint(stderr, usage)
+				return 2
+			}
+		}
+		if len(args) > 2 {
+			fmt.Fprint(stderr, usage)
+			return 2
+		}
+		return change("rollback-config", func(s apply.System) error {
+			if _, err := apply.RollbackConfig(s, strings.TrimPrefix(config.DefaultPath, "/"), n); err != nil {
+				return err
+			}
+			return applyFile(s, config.DefaultPath, stderr)
+		}, stdout, stderr)
 	case "help", "-h", "--help":
 		fmt.Fprint(stdout, usage)
 		return 0
@@ -136,17 +171,20 @@ func applyCmd(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 1 {
 		path = args[0]
 	}
-	return change("apply", func(s apply.System) error {
-		c, source, ok := load(path, stderr)
-		if !ok || !localPrefix(c, s.Root, stderr) {
-			return errors.New("invalid config; nothing was changed")
-		}
-		files, err := compile.Compile(c, source, filepath.Base(path))
-		if err != nil {
-			return err
-		}
-		return apply.Apply(s, c, source, files)
-	}, stdout, stderr)
+	return change("apply", func(s apply.System) error { return applyFile(s, path, stderr) }, stdout, stderr)
+}
+
+// applyFile validates, compiles and applies the config at path.
+func applyFile(s apply.System, path string, stderr io.Writer) error {
+	c, source, ok := load(path, stderr)
+	if !ok || !localPrefix(c, s.Root, stderr) {
+		return errors.New("invalid config; nothing was changed")
+	}
+	files, err := compile.Compile(c, source, filepath.Base(path))
+	if err != nil {
+		return err
+	}
+	return apply.Apply(s, c, source, files)
 }
 
 // diffCmd follows diff(1)'s exit codes: 0 no changes, 1 changes, 2 trouble.

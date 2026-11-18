@@ -74,7 +74,7 @@ router.toml ──validate──▶ typed config ──compile──▶ staging 
 Every apply *(planned, M3)* stores the compiled file set in `/var/lib/rollgate/generations/<N>/` along with the `router.toml` that produced it (ADR 0010).
 These generations are the config history; there is no git repository.
 Generation 0 is a copy of whatever was installed before the first apply, so even the first apply can be reverted.
-`rollgate rollback-config [N]` *(planned)* puts an earlier generation's `router.toml` back and applies it.
+`rollgate status` lists the generations and says what is running; `rollgate rollback-config [N]` puts an earlier generation's `router.toml` back (keeping the replaced one as `router.toml.before-rollback`) and applies it with commit-confirm.
 
 ## Safe apply
 
