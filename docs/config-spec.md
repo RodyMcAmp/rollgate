@@ -41,7 +41,7 @@ A typical home config should fit on one screen and need no networking expertise.
 | Key | Type | Default | Notes |
 |---|---|---|---|
 | `allowed_zones` | array of zone names | `["lan"]` | zones that can reach SSH and the web UI. Must not include `wan`; validation rejects it. Must be non-empty. |
-| `ssh_authorized_keys` | array of secret names | — | each name refers to a file in `/etc/rollgate/secrets/` |
+| `ssh_authorized_keys` | array of secret names | `[]` | public keys allowed to log in as root over SSH. Each name refers to a file in `/etc/rollgate/secrets/`, which sshd reads in place. When empty, `/root/.ssh/authorized_keys` is used (where the installer puts your key). SSH never accepts passwords. |
 | `confirm_timeout_seconds` | integer | `120` | commit-confirm window, 30–900 |
 
 ## `[[interface]]`

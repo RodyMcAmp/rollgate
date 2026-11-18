@@ -24,7 +24,7 @@ die() { echo "netns-test: FAIL: $*" >&2; exit 1; }
 log() { echo "==> $*"; }
 
 [[ $EUID -eq 0 ]] || die "must run as root"
-for tool in ip nft sysctl go timeout dnsmasq unbound-checkconf; do
+for tool in ip nft sysctl go timeout dnsmasq unbound-checkconf sshd ssh ssh-keygen; do
   command -v "$tool" >/dev/null || die "missing '$tool' (see docs/dev-setup.md)"
 done
 [[ -x $rollgate ]] || die "no rollgate binary at $rollgate (run: make rollgate)"
@@ -47,6 +47,24 @@ go build -o "$work/probe" "$here/probe.go"
 log "checking the generated DNS configs with the daemons' own checkers"
 dnsmasq --test --conf-file="$work/out/etc/dnsmasq.conf"
 unbound-checkconf "$work/out/etc/unbound/unbound.conf"
+
+log "checking the generated sshd config as sshd reads it"
+ssh-keygen -q -t ed25519 -N '' -f "$work/hostkey"
+ssh-keygen -q -t ed25519 -N '' -f "$work/admin"     # stands in for secrets/admin.pub
+ssh-keygen -q -t ed25519 -N '' -f "$work/stranger"  # a key nobody listed
+cat > "$work/sshd_config" <<EOF
+Include $work/out/etc/ssh/sshd_config.d/*.conf
+HostKey $work/hostkey
+PidFile $work/sshd.pid
+EOF
+sshd_bin=$(command -v sshd)
+effective=$("$sshd_bin" -T -f "$work/sshd_config")
+for want in "permitrootlogin prohibit-password" "authenticationmethods publickey" \
+  "passwordauthentication no" "kbdinteractiveauthentication no" \
+  "authorizedkeysfile /etc/rollgate/secrets/admin.pub"; do
+  # OpenSSH 10 prints setting names capitalized; older versions in lowercase.
+  grep -qix "$want" <<<"$effective" || die "sshd's effective config lacks '$want'"
+done
 
 log "building the namespaces"
 for ns in "${namespaces[@]}"; do
@@ -111,7 +129,14 @@ listen() {
 listen rg-wan 80     # a web server on the internet
 listen rg-lan 80     # a server on the LAN (also the port forward's target)
 listen rg-iot 80     # a device in the IoT zone
-listen rg-router 22  # stands in for sshd on the router (DNS on port 53 is the real dnsmasq)
+# Port 53 on the router is the real dnsmasq (above); port 22 is the real sshd with
+# the generated settings. Only the key file location is overridden, because the
+# test's key isn't in /etc/rollgate/secrets/ (and StrictModes refuses key files
+# under /tmp, which is world-writable).
+cp "$work/admin.pub" "$work/authorized_keys"
+ip netns exec rg-router "$sshd_bin" -D -e -f "$work/sshd_config" \
+  -o AuthorizedKeysFile="$work/authorized_keys" -o StrictModes=no 2>"$work/sshd.log" &
+pids+=($!)
 sleep 1
 
 failures=0
@@ -197,9 +222,44 @@ check "The router's name resolves on IoT"         "192.168.20.1" rg-iot dns 192.
 check "A DHCP device's name resolves"             "192.168.10.5" rg-lan dns 192.168.10.1 nas.home.arpa
 check "No DNS for the internet side"              "" rg-wan dns 203.0.113.2 gateway.home.arpa
 
+log "checking SSH logins (sshd)"
+ssh_opts=(-o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
+  -o ConnectTimeout=3 -o IdentitiesOnly=yes)
+# login <in|refused> <description> <namespace> <router address> <ssh options...>
+login() {
+  local want=$1 what=$2 ns=$3 host=$4 got out
+  shift 4
+  if out=$(ip netns exec "$ns" timeout 10 ssh "${ssh_opts[@]}" "$@" "root@$host" true 2>&1); then
+    got=in
+  else
+    got=refused
+  fi
+  if [[ $got == "$want" ]]; then
+    echo "    ok    $what ($got)"
+  else
+    echo "    WRONG $what: expected $want, got $got: $out"
+    failures=$((failures + 1))
+  fi
+  last_ssh_output=$out
+}
+login in      "The listed key logs in from the LAN"           rg-lan 192.168.10.1 -i "$work/admin"
+login refused "A key that isn't listed is refused"            rg-lan 192.168.10.1 -i "$work/stranger"
+login refused "Password login is refused"                     rg-lan 192.168.10.1 \
+  -o PubkeyAuthentication=no -o PreferredAuthentications=password,keyboard-interactive
+if [[ $last_ssh_output == *"Permission denied (publickey)"* ]]; then
+  echo "    ok    The router offers public-key login only"
+else
+  echo "    WRONG The router should offer public-key login only; ssh said: $last_ssh_output"
+  failures=$((failures + 1))
+fi
+login refused "The listed key can't log in from IoT"          rg-iot 192.168.20.1 -i "$work/admin"
+login refused "The listed key can't log in from the internet" rg-wan 203.0.113.2 -i "$work/admin"
+
 if ((failures > 0)); then
   echo "--- dnsmasq log:"
   cat "$work/dnsmasq.log" || true
+  echo "--- sshd log:"
+  cat "$work/sshd.log" || true
   die "$failures check(s) failed"
 fi
-log "PASS: firewall, NAT, port forward, DHCP and local DNS behave as configured"
+log "PASS: firewall, NAT, port forward, DHCP, local DNS and SSH behave as configured"

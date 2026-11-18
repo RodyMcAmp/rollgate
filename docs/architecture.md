@@ -32,7 +32,7 @@ That keeps mistakes in our code to the config layer, where tests can catch them.
 | LAN DHCPv4, local hostnames | dnsmasq | `/etc/dnsmasq.conf` (the main file: Arch's default doesn't read a drop-in directory) | ADR 0006 |
 | Recursive DNS, DNSSEC, blocklists | Unbound | `/etc/unbound/unbound.conf` (the main file, for the same reason) | ADR 0006 |
 | Kernel networking settings | sysctl | `/etc/sysctl.d/90-rollgate.conf` | — |
-| Management access | OpenSSH | `/etc/ssh/sshd_config.d/rollgate.conf` | — |
+| Management access | OpenSSH | `/etc/ssh/sshd_config.d/10-rollgate.conf` (read before any other drop-in, so its settings win) | — |
 | Config compiler and CLI | rollgate (Go) | — | ADR 0005 |
 | Snapshots and rollback | Btrfs, snapper, GRUB, grub-btrfs | — | ADR 0004 |
 

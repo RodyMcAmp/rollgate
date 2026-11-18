@@ -30,7 +30,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Install test tools
-        run: pacman -Syu --noconfirm --needed make go iproute2 nftables procps-ng dnsmasq unbound
+        run: pacman -Syu --noconfirm --needed make go iproute2 nftables procps-ng dnsmasq unbound openssh
       - run: make test-netns
 
   image:

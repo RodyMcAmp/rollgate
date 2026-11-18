@@ -1,0 +1,22 @@
+{{.Header}}
+#
+# SSH for managing the router (docs/config-spec.md#management). Which zones can
+# reach it is enforced by the firewall (management.allowed_zones), so sshd
+# listens on every address: a renumbered network can't lock you out here.
+# sshd keeps the first value it reads for each setting, and this file is read
+# before any other drop-in, so these settings win.
+
+PermitRootLogin prohibit-password
+AuthenticationMethods publickey
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitEmptyPasswords no
+{{- if .Keys}}
+# management.ssh_authorized_keys, read in place from /etc/rollgate/secrets/.
+AuthorizedKeysFile{{range .Keys}} /etc/rollgate/secrets/{{.}}{{end}}
+{{- else}}
+# management.ssh_authorized_keys is empty: use the key the installer put in
+# /root/.ssh/authorized_keys.
+AuthorizedKeysFile .ssh/authorized_keys
+{{- end}}
+X11Forwarding no
