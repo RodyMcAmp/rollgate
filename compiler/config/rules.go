@@ -158,6 +158,10 @@ func validateRules(c *Config, ps *problems) {
 		if pf.WANPortFirst == 0 {
 			continue
 		}
+		if p := int(pf.Target.Port()); pf.Target.IsValid() && pf.WANPortLast != pf.WANPortFirst && p != pf.WANPortFirst {
+			ps.add(CodePortForward, path+" to", "for the port range %d-%d, use the first port %d here; each port goes to the same port on the device",
+				pf.WANPortFirst, pf.WANPortLast, pf.WANPortFirst)
+		}
 		protocols := strings.Split(pf.Protocol, "+")
 		for _, proto := range protocols {
 			for port := pf.WANPortFirst; port <= pf.WANPortLast; port++ {

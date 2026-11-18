@@ -8,10 +8,11 @@ IMAGE := $(BUILD_DIR)/rollgate-$(SNAPSHOT_DATE).img
 SUDO := $(if $(filter 0,$(shell id -u)),,sudo)
 
 SHELL_SCRIPTS := image/build.sh tests/vm/boot-test.sh tests/vm/rollback-test.sh \
+	tests/netns/run.sh \
 	image/rootfs/usr/local/sbin/rollgate-snapshot-rollback \
 	image/rootfs/usr/local/lib/rollgate/boot-report
 
-.PHONY: check golden-update rollgate image test-vm test-rollback clean
+.PHONY: check golden-update rollgate test-netns image test-vm test-rollback clean
 
 ## L0 + L1: shell lint, Go format/vet/lint/tests, and the example config validates.
 ## Run before every commit.
@@ -30,6 +31,11 @@ golden-update:
 ## Build the rollgate CLI as a static binary (ADR 0005).
 rollgate:
 	cd compiler && CGO_ENABLED=0 go build -trimpath -o ../$(BUILD_DIR)/rollgate ./cmd/rollgate
+
+## L2: load the generated firewall and sysctl settings into network namespaces and
+## check real traffic against the policy (tests/netns/run.sh). Needs root.
+test-netns: rollgate
+	$(SUDO) ROLLGATE=$(BUILD_DIR)/rollgate bash tests/netns/run.sh
 
 ## Build the disk image at the date in image/snapshot-date.
 image:

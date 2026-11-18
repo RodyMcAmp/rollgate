@@ -19,6 +19,20 @@ jobs:
         run: pacman -Syu --noconfirm --needed make shellcheck go staticcheck
       - run: make check
 
+  netns:
+    name: L2 namespace tests
+    needs: check
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+      # Creating network namespaces and loading nftables rules needs root privileges.
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install test tools
+        run: pacman -Syu --noconfirm --needed make go iproute2 nftables procps-ng
+      - run: make test-netns
+
   image:
     name: Build image + L3 boot test
     needs: check
