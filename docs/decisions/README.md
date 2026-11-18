@@ -23,7 +23,7 @@ They exist so that new contributors, especially AI agents arriving with no memor
 | [0007](0007-docs-for-humans-and-agents.md) | Documentation methodology for humans and AI agents | Accepted |
 | [0008](0008-ipv6-auto.md) | IPv6 is one setting: `auto` or `off` | Accepted |
 | [0009](0009-image-build-with-pacstrap.md) | Build the image with pacstrap scripts; GRUB's files on the ESP | Accepted |
-| [0010](0010-safe-apply.md) | Safe apply: generations, commit-confirm, revert at boot | Proposed |
+| [0010](0010-safe-apply.md) | Safe apply: generations, commit-confirm, revert at boot | Accepted |
 
 ## Template
 

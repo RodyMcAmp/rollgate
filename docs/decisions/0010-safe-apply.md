@@ -1,6 +1,6 @@
 # 0010. Safe apply: generations, commit-confirm, revert at boot
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-18
 
 ## Context
