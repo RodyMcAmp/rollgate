@@ -1,6 +1,6 @@
 // Command rollgate validates, compiles and applies router.toml.
-// See docs/architecture.md#config-flow. M2 delivers validate and compile;
-// diff and apply are planned.
+// See docs/architecture.md#config-flow. M2 delivered validate, compile, diff
+// and schema; apply is planned for M3.
 package main
 
 import (

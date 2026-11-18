@@ -5,7 +5,7 @@
 A router and firewall OS for home labs and small offices, built on Arch Linux.
 It always runs a recent stable kernel and recent stable packages, and any update can be rolled back from the boot menu.
 
-> **Status: M1 done.** The image builds, boots both kernels and passes the rollback rehearsal in CI. It isn't a router yet; that starts with M2. See [docs/roadmap.md](docs/roadmap.md).
+> **Status: M2 done.** The image builds, boots and rolls back in CI, and the config compiler turns `router.toml` into tested firewall, network, DHCP, DNS and SSH settings. The image doesn't use them yet; installing them safely (`rollgate apply`) is M3. See [docs/roadmap.md](docs/roadmap.md).
 > To build it, see [docs/dev-setup.md](docs/dev-setup.md). "rollgate" is a working name.
 
 ## The idea
