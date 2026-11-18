@@ -139,7 +139,17 @@ echo KEYMAP=us > "$mnt/etc/vconsole.conf"
 # -K: fresh keyring in the target. -M: don't copy the host mirrorlist.
 # -c: download into $build_dir/pkgcache (CacheDir above) instead of the image.
 # SNAP_PAC_SKIP: snapper isn't configured yet, so snap-pac's hooks would only fail.
-SNAP_PAC_SKIP=y pacstrap -C "$work/pacman.conf" -K -M -c "$mnt" "${packages[@]}"
+# archive.archlinux.org sometimes stalls or times out. pacman downloads everything
+# before installing anything, so a failed download leaves nothing half-installed and
+# a retry is safe.
+for attempt in 1 2 3; do
+  if SNAP_PAC_SKIP=y pacstrap -C "$work/pacman.conf" -K -M -c "$mnt" "${packages[@]}"; then
+    break
+  fi
+  ((attempt < 3)) || die "pacstrap failed 3 times (see the errors above)"
+  log "pacstrap failed (attempt $attempt of 3); retrying in 30 seconds"
+  sleep 30
+done
 
 log "copying overlay files"
 # Explicit modes, never the checkout's: a Windows or WSL checkout makes everything 0777.
