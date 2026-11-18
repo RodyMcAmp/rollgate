@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"maps"
+	"net"
 	"net/netip"
 	"slices"
 	"strings"
@@ -40,11 +41,31 @@ func validateRules(c *Config, ps *problems) {
 		}
 	}
 
-	// E001: exactly one WAN.
+	// E011: each port is matched once, and every segment gets its own device.
+	devices := map[string]string{}
+	macs := map[string]string{}
+	for i, in := range c.Interfaces {
+		path := itemPath("interface", i, in.Name)
+		if hw, err := net.ParseMAC(in.MatchMAC); err == nil {
+			if other, ok := macs[hw.String()]; ok {
+				ps.add(CodeDuplicate, path+" match_mac", "%s already matches this MAC address", other)
+			}
+			macs[hw.String()] = path
+		}
+		claimDevice(ps, devices, path, in.Device())
+	}
+	for i, v := range c.VLANs {
+		claimDevice(ps, devices, itemPath("vlan", i, v.Name), v.Name)
+	}
+
+	// E001: exactly one WAN, using DHCP until the spec has a gateway setting.
 	var wans []segment
 	for _, s := range segs {
 		if s.zone == "wan" {
 			wans = append(wans, s)
+			if s.addr.IsValid() {
+				ps.add(CodeInvalid, s.path+" ipv4", "a static WAN address isn't supported yet (it also needs a gateway setting); use \"dhcp\"")
+			}
 		}
 	}
 	switch {
@@ -152,15 +173,15 @@ func validateRules(c *Config, ps *problems) {
 }
 
 // checkDHCP checks a DHCP section against the subnet it serves.
-func checkDHCP(ps *problems, path string, net netip.Prefix, d DHCP) {
-	router := net.Addr()
+func checkDHCP(ps *problems, path string, subnet netip.Prefix, d DHCP) {
+	router := subnet.Addr()
 	inRange := func(a netip.Addr) bool {
 		return d.RangeStart.IsValid() && d.RangeEnd.IsValid() && !a.Less(d.RangeStart) && !d.RangeEnd.Less(a)
 	}
 	for _, a := range []netip.Addr{d.RangeStart, d.RangeEnd} {
-		if a.IsValid() && !usable(net, a) {
+		if a.IsValid() && !usable(subnet, a) {
 			ps.add(CodeDHCP, path+" range", "%s isn't a device address in %s; use addresses from %s to %s",
-				a, net.Masked(), net.Masked().Addr().Next(), lastAddr(net).Prev())
+				a, subnet.Masked(), subnet.Masked().Addr().Next(), lastAddr(subnet).Prev())
 		}
 	}
 	if inRange(router) {
@@ -172,8 +193,8 @@ func checkDHCP(ps *problems, path string, net netip.Prefix, d DHCP) {
 		}
 		spath := itemPath(path+" static", i, s.Hostname) + " ipv4"
 		switch {
-		case !usable(net, s.Addr):
-			ps.add(CodeDHCP, spath, "%s isn't a device address in %s", s.Addr, net.Masked())
+		case !usable(subnet, s.Addr):
+			ps.add(CodeDHCP, spath, "%s isn't a device address in %s", s.Addr, subnet.Masked())
 		case s.Addr == router:
 			ps.add(CodeDHCP, spath, "%s is the router's own address", s.Addr)
 		case inRange(s.Addr):
@@ -181,6 +202,18 @@ func checkDHCP(ps *problems, path string, net netip.Prefix, d DHCP) {
 				s.Addr, d.RangeStart, d.RangeEnd)
 		}
 	}
+}
+
+// claimDevice reports a device name that two segments would both use, such as
+// an interface named "wan" and another one with match_device = "wan".
+func claimDevice(ps *problems, devices map[string]string, path, device string) {
+	if device == "" {
+		return
+	}
+	if other, ok := devices[device]; ok && other != path {
+		ps.add(CodeDuplicate, path, "would use the network device %q, which %s already uses", device, other)
+	}
+	devices[device] = path
 }
 
 // usable reports whether a is a device address in p: inside it, and neither

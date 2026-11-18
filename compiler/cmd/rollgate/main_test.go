@@ -23,6 +23,10 @@ func TestValidateCommand(t *testing.T) {
 		{"example is valid", []string{"validate", "../../../examples/router.toml"}, 0, "valid", ""},
 		{"invalid config", []string{"validate", bad}, 1, "", "E009 system.ipv6"},
 		{"missing file", []string{"validate", filepath.Join(t.TempDir(), "nope.toml")}, 1, "", "E012"},
+		{"compile example", []string{"compile", "-o", filepath.Join(t.TempDir(), "out"), "../../../examples/router.toml"}, 0, "30-rollgate-lan.network", ""},
+		{"compile needs -o", []string{"compile", "../../../examples/router.toml"}, 2, "", "usage"},
+		{"compile refuses invalid config", []string{"compile", "-o", filepath.Join(t.TempDir(), "out"), bad}, 1, "", "E009"},
+		{"compile refuses non-empty dir", []string{"compile", "-o", filepath.Dir(bad), "../../../examples/router.toml"}, 1, "", "not empty"},
 		{"no command", nil, 2, "", "usage"},
 		{"unknown command", []string{"frobnicate"}, 2, "", "unknown command"},
 	}

@@ -132,6 +132,15 @@ func TestProblems(t *testing.T) {
 		{"bad forwarder", base + "[dns]\nmode = \"forward\"\nforwarders = [\"dns.quad9.net\"]\n", []string{"E009 dns.forwarders"}},
 		{"blocklists not yet", base + "[dns]\nblocklists = [\"https://example.com/list\"]\n", []string{"E009 dns.blocklists"}},
 
+		{"same MAC twice", base + "\n[[interface]]\nname = \"a\"\nmatch_mac = \"00:00:5e:00:53:01\"\nipv4 = \"10.0.0.1/24\"\n" +
+			"\n[[interface]]\nname = \"b\"\nmatch_mac = \"00:00:5E:00:53:01\"\nipv4 = \"10.0.1.1/24\"\n", []string{`E011 interface "b" match_mac`}},
+		{"same device twice", base + "\n[[interface]]\nname = \"dmz\"\nmatch_device = \"eth1\"\nipv4 = \"10.0.0.1/24\"\n", []string{`E011 interface "dmz"`}},
+		{"device named like another interface", base + "\n[[interface]]\nname = \"dmz\"\nmatch_device = \"lan\"\nipv4 = \"10.0.0.1/24\"\n" +
+			"\n[[interface]]\nname = \"lan2\"\nmatch_mac = \"00:00:5e:00:53:01\"\nipv4 = \"10.0.1.1/24\"\n" + vlan("dmz2", "lan2", 9, `ipv4 = "10.0.2.1/24"`) +
+			"\n[[interface]]\nname = \"x\"\nmatch_device = \"dmz2\"\nipv4 = \"10.0.3.1/24\"\n",
+			[]string{`E011 vlan "dmz2"`}},
+		{"static wan", strings.Replace(base, `ipv4 = "dhcp"`, `ipv4 = "203.0.113.2/24"`, 1), []string{`E009 interface "wan" ipv4`}},
+
 		{"policy action", base + "[[firewall.policy]]\nfrom = \"lan\"\nto = \"*\"\naction = \"allow\"\n", []string{"E009 firewall.policy #1 action"}},
 		{"policy without from", base + "[[firewall.policy]]\nto = \"*\"\naction = \"drop\"\n", []string{"E010 firewall.policy #1 from"}},
 

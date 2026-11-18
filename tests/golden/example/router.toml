@@ -1,0 +1,69 @@
+# Example rollgate config: one WAN, a trusted LAN, and an isolated IoT VLAN.
+# Spec: docs/config-spec.md
+schema_version = 1
+
+[system]
+hostname = "gateway"
+domain = "home.arpa"
+timezone = "UTC"
+ipv6 = "auto"   # local IPv6 always; IPv6 internet too if your ISP offers it. "off" disables.
+
+[management]
+allowed_zones = ["lan"]
+ssh_authorized_keys = ["admin.pub"]   # /etc/rollgate/secrets/admin.pub
+confirm_timeout_seconds = 120
+
+[[interface]]
+name = "wan"
+match_mac = "00:00:5e:00:53:01"
+ipv4 = "dhcp"
+
+[[interface]]
+name = "lan"
+match_mac = "00:00:5e:00:53:02"
+ipv4 = "192.168.10.1/24"
+
+[[vlan]]
+name = "iot"
+parent = "lan"
+id = 20
+ipv4 = "192.168.20.1/24"
+
+[dhcp.lan]
+range = ["192.168.10.100", "192.168.10.199"]
+lease_time = "12h"
+
+[[dhcp.lan.static]]
+hostname = "nas"
+mac = "00:00:5e:00:53:10"
+ipv4 = "192.168.10.5"
+
+[dhcp.iot]
+range = ["192.168.20.100", "192.168.20.199"]
+lease_time = "4h"
+
+[dns]
+mode = "recursive"
+
+[[firewall.policy]]
+from = "lan"
+to = "*"
+action = "accept"
+comment = "trusted LAN can reach everything"
+
+[[firewall.policy]]
+from = "iot"
+to = "wan"
+action = "accept"
+comment = "IoT devices get internet only"
+
+[[firewall.policy]]
+from = "*"
+to = "*"
+action = "drop"
+
+[[firewall.port_forward]]
+name = "game server"
+protocol = "udp"
+wan_port = 27015
+to = "192.168.10.50:27015"

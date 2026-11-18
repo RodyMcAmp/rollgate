@@ -11,7 +11,7 @@ SHELL_SCRIPTS := image/build.sh tests/vm/boot-test.sh tests/vm/rollback-test.sh 
 	image/rootfs/usr/local/sbin/rollgate-snapshot-rollback \
 	image/rootfs/usr/local/lib/rollgate/boot-report
 
-.PHONY: check rollgate image test-vm test-rollback clean
+.PHONY: check golden-update rollgate image test-vm test-rollback clean
 
 ## L0 + L1: shell lint, Go format/vet/lint/tests, and the example config validates.
 ## Run before every commit.
@@ -21,6 +21,11 @@ check:
 	  if [ -n "$$unformatted" ]; then echo "gofmt needed: $$unformatted"; exit 1; fi
 	cd compiler && go vet ./... && staticcheck ./... && go test ./...
 	cd compiler && go run ./cmd/rollgate validate ../examples/router.toml
+
+## Rewrite tests/golden/*/expected from the compiler. Review the diff before committing;
+## never run this just to make a failing test pass (docs/testing.md).
+golden-update:
+	cd compiler && go test ./compile -run TestGolden -update
 
 ## Build the rollgate CLI as a static binary (ADR 0005).
 rollgate:
