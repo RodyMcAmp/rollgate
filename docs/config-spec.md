@@ -126,7 +126,19 @@ These overrides exist for unusual setups. They are deliberately left out of the 
 |---|---|---|---|
 | `[ipv6] ula_prefix` | string | generated once, stored in `/etc/rollgate/state/ula-prefix` | a fixed local IPv6 /48, e.g. kept from a previous router |
 | `[ipv6] wan_prefix_hint` | integer 48–64 | `56` | delegated prefix size to request from the ISP |
-| `ipv6_subnet_id` on `[[interface]]` / `[[vlan]]` | integer 0–255 | derived from the zone name | pins the zone's /64 within the /48 (or within the delegated prefix; 0–255 fits the default /56) |
+| `ipv6_subnet_id` on `[[interface]]` / `[[vlan]]` | integer 0–255 | derived from the name | pins this network's /64 within the /48 (or within the delegated prefix; 0–255 fits the default /56) |
+
+### How `ipv6 = "auto"` is compiled (ADR 0008)
+
+- **Local prefix (ULA /48):** `ipv6.ula_prefix` if set; otherwise the one stored in `/etc/rollgate/state/ula-prefix`.
+  If neither exists (a new router, or a live boot), `rollgate compile` generates a random `fdXX:XXXX:XXXX::/48` and includes the state file in its output, so the first apply stores it and it never changes afterwards.
+- **One /64 per network:** every interface and VLAN with a static IPv4 address (not WAN) gets subnet number `ipv6_subnet_id`, or else one derived from its name (FNV-1a hash, 0–255), so adding or reordering networks doesn't renumber the others.
+  If two names hash to the same number, the alphabetically later one takes the next free number.
+  The router is `::1` in each /64, e.g. `fd12:3456:789a:4f::1/64`.
+- **LAN side:** the router announces each /64 with router advertisements (SLAAC), its own ULA address as the DNS server, and `system.domain` as the search domain.
+  When the ISP delegates a prefix, each network also gets a public /64 from it with the same subnet number, announced the same way.
+  A delegated /60 has room for subnet numbers 0–15 only; networks with a higher number then get local IPv6 only.
+- **WAN side:** the router accepts the ISP's router advertisements and always asks for a delegated prefix of size `wan_prefix_hint` with DHCPv6, ignoring the ISP's DNS settings (the router resolves names itself).
 
 ## Validation rules
 

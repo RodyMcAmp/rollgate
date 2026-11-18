@@ -9,8 +9,9 @@
 #                          └──────veth── [rg-iot]
 #
 # Interface addresses are set by this script, standing in for networkd (which
-# loads the generated .network files on a real router; the L3 tests cover that
-# from M3). IPv6 uses fixed test addresses until ipv6 = "auto" lands (M2 PR 6).
+# loads the generated .network files on a real router; the L3 tests cover that,
+# including router advertisements and prefix delegation, from M3). The router's
+# IPv4 and IPv6 addresses are read from the compiled .network files.
 #
 # Usage:  sudo tests/netns/run.sh        (needs root, ip, nft, sysctl, go)
 # Env:    ROLLGATE  path to the rollgate binary (default: build/rollgate)
@@ -88,20 +89,26 @@ addr() {
   shift
   for a in "$@"; do ip -n "$ns" addr add "$a" dev "${dev:-eth0}" nodad 2>/dev/null || ip -n "$ns" addr add "$a" dev "${dev:-eth0}"; done
 }
-# The router's LAN addresses come from the compiled networkd files.
-lan_addr=$(sed -n 's/^Address=//p' "$work/out/etc/systemd/network/30-rollgate-lan.network")
-iot_addr=$(sed -n 's/^Address=//p' "$work/out/etc/systemd/network/30-rollgate-iot.network")
+# The router's addresses come from the compiled networkd files: IPv4 as configured,
+# IPv6 from the ULA prefix and each network's subnet number (ipv6 = "auto").
+compiled() { sed -n "s/^Address=\($2\)/\1/p" "$work/out/etc/systemd/network/30-rollgate-$1.network"; }
+lan_addr=$(compiled lan '[0-9.]*\/[0-9]*') lan6=$(compiled lan 'fd.*')
+iot_addr=$(compiled iot '[0-9.]*\/[0-9]*') iot6=$(compiled iot 'fd.*')
 [[ $lan_addr == 192.168.10.1/24 && $iot_addr == 192.168.20.1/24 ]] || die "unexpected compiled addresses: $lan_addr $iot_addr"
+[[ $lan6 == fd12:3456:789a:*::1/64 && $iot6 == fd12:3456:789a:*::1/64 && $lan6 != "$iot6" ]] ||
+  die "unexpected compiled IPv6 addresses: '$lan6' '$iot6'"
+lan6_net=${lan6%::1/64} iot6_net=${iot6%::1/64}
+echo "    LAN IPv6 ${lan6_net}::/64, IoT IPv6 ${iot6_net}::/64"
 dev=wan addr rg-router 203.0.113.2/24 2001:db8:ffff::2/64
-dev=lan addr rg-router "$lan_addr" fd00:10::1/64
-dev=iot addr rg-router "$iot_addr" fd00:20::1/64
+dev=lan addr rg-router "$lan_addr" "$lan6"
+dev=iot addr rg-router "$iot_addr" "$iot6"
 addr rg-wan 203.0.113.1/24 2001:db8:ffff::1/64
-addr rg-lan 192.168.10.50/24 fd00:10::50/64
-addr rg-iot 192.168.20.50/24 fd00:20::50/64
+addr rg-lan 192.168.10.50/24 "${lan6_net}::50/64"
+addr rg-iot 192.168.20.50/24 "${iot6_net}::50/64"
 ip -n rg-lan route add default via 192.168.10.1
-ip -n rg-lan -6 route add default via fd00:10::1
+ip -n rg-lan -6 route add default via "${lan6_net}::1"
 ip -n rg-iot route add default via 192.168.20.1
-ip -n rg-iot -6 route add default via fd00:20::1
+ip -n rg-iot -6 route add default via "${iot6_net}::1"
 ip -n rg-router route add default via 203.0.113.1
 ip -n rg-router -6 route add default via 2001:db8:ffff::1
 # IPv6 isn't NATed, so the "internet" routes the local prefixes back to the router,
@@ -162,11 +169,11 @@ expect open    "LAN reaches the internet (IPv6)"                  rg-lan 2001:db
 expect open    "IoT reaches the internet (IPv4)"                  rg-iot 203.0.113.1 80
 expect open    "IoT reaches the internet (IPv6)"                  rg-iot 2001:db8:ffff::1 80
 expect blocked "IoT can't reach the LAN (IPv4)"                   rg-iot 192.168.10.50 80
-expect blocked "IoT can't reach the LAN (IPv6)"                   rg-iot fd00:10::50 80
+expect blocked "IoT can't reach the LAN (IPv6)"                   rg-iot "${lan6_net}::50" 80
 expect open    "LAN reaches IoT devices (policy lan -> *)"        rg-lan 192.168.20.50 80
 expect open    "LAN reaches SSH on the router"                    rg-lan 192.168.10.1 22
 expect blocked "IoT can't reach SSH (not a management zone)"      rg-iot 192.168.20.1 22
-expect blocked "IoT can't reach SSH over IPv6"                    rg-iot fd00:20::1 22
+expect blocked "IoT can't reach SSH over IPv6"                    rg-iot "${iot6_net}::1" 22
 expect open    "IoT reaches DNS on the router ([dhcp.iot])"       rg-iot 192.168.20.1 53
 expect blocked "WAN can't reach SSH on the router"                rg-wan 203.0.113.2 22
 expect blocked "WAN can't reach SSH on the router over IPv6"      rg-wan 2001:db8:ffff::2 22
@@ -183,7 +190,7 @@ else
   echo "    WRONG IPv4 to the internet came from: $peers(expected only 203.0.113.2)"
   failures=$((failures + 1))
 fi
-if grep -qx 'fd00:10::50' "$work/rg-wan-80.log"; then
+if grep -qx "${lan6_net}::50" "$work/rg-wan-80.log"; then
   echo "    ok    IPv6 isn't NATed"
 else
   echo "    WRONG IPv6 to the internet didn't keep the LAN address"
@@ -194,8 +201,8 @@ log "checking that WAN can't reach local networks directly"
 # An attacker on the ISP's network routes LAN addresses at the router.
 ip -n rg-wan route add 192.168.0.0/16 via 203.0.113.2
 expect blocked "WAN can't reach a LAN device directly (IPv4)"     rg-wan 192.168.10.50 80
-expect blocked "WAN can't reach a LAN device directly (IPv6)"     rg-wan fd00:10::50 80
-expect blocked "WAN can't reach an IoT device directly (IPv6)"    rg-wan fd00:20::50 80
+expect blocked "WAN can't reach a LAN device directly (IPv6)"     rg-wan "${lan6_net}::50" 80
+expect blocked "WAN can't reach an IoT device directly (IPv6)"    rg-wan "${iot6_net}::50" 80
 
 log "checking DHCP and local DNS (dnsmasq)"
 # check <description> <expected output as a glob pattern, or "" to expect no answer>

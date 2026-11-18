@@ -12,3 +12,24 @@ RequiredForOnline=no
 Address=10.10.0.1/16
 # Keep the address even with no cable plugged in, so DHCP and DNS can bind to it.
 ConfigureWithoutCarrier=yes
+# Local IPv6 (ULA) and, when the ISP delegates a prefix, public IPv6 (ADR 0008).
+Address=fd12:3456:789a:10::1/64
+IPv6SendRA=yes
+DHCPPrefixDelegation=yes
+
+[IPv6SendRA]
+# The router's local address never changes, so clients' DNS settings never go stale.
+EmitDNS=yes
+DNS=fd12:3456:789a:10::1
+EmitDomains=yes
+Domains=lab.example
+
+[IPv6Prefix]
+Prefix=fd12:3456:789a:10::/64
+
+[DHCPPrefixDelegation]
+# A public /64 from the ISP's delegated prefix, when there is one.
+UplinkInterface=eth0
+SubnetId=0x10
+Announce=yes
+Token=::1

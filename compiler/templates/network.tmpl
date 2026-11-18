@@ -9,11 +9,17 @@ RequiredForOnline={{if .WAN}}routable{{else}}no{{end}}
 
 [Network]
 {{- if .DHCPClient}}
-DHCP=ipv4
+DHCP={{if .WANIPv6}}yes{{else}}ipv4{{end}}
 {{- else}}
 Address={{.Addr}}
 # Keep the address even with no cable plugged in, so DHCP and DNS can bind to it.
 ConfigureWithoutCarrier=yes
+{{- end}}
+{{- with .IPv6}}
+# Local IPv6 (ULA) and, when the ISP delegates a prefix, public IPv6 (ADR 0008).
+Address={{.Addr}}
+IPv6SendRA=yes
+DHCPPrefixDelegation=yes
 {{- end}}
 {{- range .VLANs}}
 VLAN={{.}}
@@ -31,4 +37,37 @@ IPv6AcceptRA=no
 UseDNS=no
 UseDomains=no
 UseHostname=no
+{{- end}}
+{{- if .WANIPv6}}
+
+[IPv6AcceptRA]
+# Always ask for a delegated prefix, even if the ISP's router advertisement
+# doesn't mention DHCPv6. Harmless when the ISP offers no IPv6.
+DHCPv6Client=always
+UseDNS=no
+UseDomains=no
+
+[DHCPv6]
+PrefixDelegationHint=::/{{.WANIPv6}}
+UseDNS=no
+UseDomains=no
+{{- end}}
+{{- with .IPv6}}
+
+[IPv6SendRA]
+# The router's local address never changes, so clients' DNS settings never go stale.
+EmitDNS=yes
+DNS={{.DNS}}
+EmitDomains=yes
+Domains={{.Domain}}
+
+[IPv6Prefix]
+Prefix={{.Prefix}}
+
+[DHCPPrefixDelegation]
+# A public /64 from the ISP's delegated prefix, when there is one.
+UplinkInterface={{.Uplink}}
+SubnetId={{.SubnetID}}
+Announce=yes
+Token=::1
 {{- end}}
