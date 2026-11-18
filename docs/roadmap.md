@@ -54,6 +54,13 @@ Architecture, config spec draft, ADRs 0001–0008, the agent and contributor pro
 
 ## Later / ideas
 
+- **Live router install media** (proposed 2026-11-18). The USB installer boots into a working router with "good enough" defaults, so you can try rollgate, or rescue a network, without touching the disk.
+  "Install" then copies the system to disk and keeps the settings you made. OPNsense's installer works this way. Design notes:
+  - The defaults are a generated `router.toml`, never hand-made system files (hard rule 3). A first-boot tool picks WAN as the port that gets a DHCP lease, makes the other ports LAN, and chooses a LAN subnet that doesn't clash with the WAN subnet (the ISP modem may already use `192.168.1.0/24`).
+  - It runs from RAM with a writable overlay, the same mechanism as booting a snapshot from the GRUB menu (grub-btrfs overlayfs, ADR 0009).
+  - Safe while live: WAN stays default-deny; management only from LAN; console login; no SSH until keys are added.
+  - The same media provides the recovery runbook's planned "Rescue" entry.
+  - **Keep it possible from M2 on:** the compiler and apply must work on a read-only root with a RAM overlay and must not assume state already exists (the ULA prefix is simply generated fresh on a live boot). Auto-detection writes `router.toml`; it never writes generated files.
 - Multi-WAN failover, traffic shaping (CAKE), a Proxmox VM image, our own archive mirror.
 - Opt-in IPv6 tunnel (6in4 tunnel broker) for users whose ISP has no IPv6. Needs a public IPv4 address; won't work behind carrier-grade NAT.
 - IPv6 inbound pinholes (the IPv6 equivalent of port forwards).
