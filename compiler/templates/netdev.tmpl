@@ -1,0 +1,9 @@
+{{.Header}}
+# VLAN {{.VLANID}} on {{.Parent}}.
+
+[NetDev]
+Name={{.Device}}
+Kind=vlan
+
+[VLAN]
+Id={{.VLANID}}

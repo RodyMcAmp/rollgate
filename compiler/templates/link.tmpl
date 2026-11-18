@@ -1,0 +1,11 @@
+{{.Header}}
+# Names the port with MAC {{.MAC}} "{{.Device}}", so the firewall and status
+# output can use the name from router.toml.
+# PermanentMACAddress matches the hardware address only: VLANs and bridges
+# share their parent's MAC and must not be renamed too.
+
+[Match]
+PermanentMACAddress={{.MAC}}
+
+[Link]
+Name={{.Device}}

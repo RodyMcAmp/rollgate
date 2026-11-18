@@ -1,0 +1,16 @@
+# Golden case: the smallest useful config. Ports matched by device name
+# (no .link renames), IPv6 off, everything else from defaults.
+schema_version = 1
+
+[system]
+ipv6 = "off"
+
+[[interface]]
+name = "wan"
+match_device = "enp1s0"
+ipv4 = "dhcp"
+
+[[interface]]
+name = "lan"
+match_device = "enp2s0"
+ipv4 = "192.168.1.1/24"

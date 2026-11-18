@@ -52,7 +52,7 @@ A typical home config should fit on one screen and need no networking expertise.
 | `match_mac` | string | one of `match_mac` / `match_device` | preferred: survives NIC renaming |
 | `match_device` | string | | e.g. `enp1s0` |
 | `zone` | string | no | defaults to `name`. The zone named `wan` is special. |
-| `ipv4` | string | yes | `"dhcp"` or a CIDR address such as `"192.168.10.1/24"` |
+| `ipv4` | string | yes | `"dhcp"` or a CIDR address such as `"192.168.10.1/24"`. The `wan` interface must use `"dhcp"` for now; a static WAN address also needs a gateway setting *(planned)*. |
 
 There are no per-interface IPv6 settings. IPv6 is handled automatically by `system.ipv6`.
 
@@ -133,8 +133,15 @@ Each problem has a stable error code, so docs, tests and agents can refer to it.
 | `E008` | `ipv6.ula_prefix`, if set, is a /48 inside `fd00::/8`; `wan_prefix_hint` is 48–64; `ipv6_subnet_id` values are 0–255 and unique. |
 | `E009` | A value has the wrong format or is out of range (for example an address, a MAC, a port, or a choice such as `ipv6`). |
 | `E010` | A required key is missing. |
-| `E011` | A name is used twice (interfaces and VLANs, VLAN IDs on one parent, static leases, port forwards). |
+| `E011` | A name or port is used twice (interfaces and VLANs, the same MAC or device matched by two interfaces, VLAN IDs on one parent, static leases, port forwards). |
 | `E012` | The file can't be read or isn't valid TOML (including a value of the wrong type, such as `id = "20"`). |
 
 Names of interfaces, VLANs and zones are 1–15 characters: lowercase letters, digits and `-`, starting with a letter.
 The 15-character limit is Linux's limit on network device names.
+
+## How names map to devices
+
+The compiler gives every interface and VLAN a Linux network device named after it, so firewall rules and status output use the names from `router.toml`:
+- An interface with `match_mac` is renamed to its `name` (a systemd `.link` file matching the port's permanent MAC address).
+- An interface with `match_device` keeps that device name.
+- A VLAN is created as a device named after the VLAN.

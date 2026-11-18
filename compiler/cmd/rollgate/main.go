@@ -1,27 +1,33 @@
 // Command rollgate validates, compiles and applies router.toml.
-// See docs/architecture.md#config-flow. Only `validate` exists so far (M2).
+// See docs/architecture.md#config-flow. M2 delivers validate and compile;
+// diff and apply are planned.
 package main
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
+	"github.com/RodyMcAmp/rollgate/compiler/compile"
 	"github.com/RodyMcAmp/rollgate/compiler/config"
 )
 
 const usage = `usage: rollgate <command> [arguments]
 
 commands:
-  validate [file]   check a config (default ` + config.DefaultPath + `)
+  validate [file]          check a config (default ` + config.DefaultPath + `)
+  compile -o DIR [file]    validate, then write the generated system files below
+                           DIR (a new or empty directory); changes nothing else
 `
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
 
-// run returns the exit code: 0 success, 1 invalid config, 2 bad usage.
+// run returns the exit code: 0 success, 1 invalid config or failure, 2 bad usage.
 func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		fmt.Fprint(stderr, usage)
@@ -37,7 +43,13 @@ func run(args []string, stdout, stderr io.Writer) int {
 		if len(args) == 2 {
 			path = args[1]
 		}
-		return validate(path, stdout, stderr)
+		if _, _, ok := load(path, stderr); !ok {
+			return 1
+		}
+		fmt.Fprintf(stdout, "%s: valid\n", path)
+		return 0
+	case "compile":
+		return compileCmd(args[1:], stdout, stderr)
 	case "help", "-h", "--help":
 		fmt.Fprint(stdout, usage)
 		return 0
@@ -47,21 +59,55 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 }
 
-func validate(path string, stdout, stderr io.Writer) int {
-	_, err := config.Load(path)
+func compileCmd(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("compile", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	out := fs.String("o", "", "output directory (new or empty)")
+	if err := fs.Parse(args); err != nil || *out == "" || fs.NArg() > 1 {
+		fmt.Fprint(stderr, usage)
+		return 2
+	}
+	path := config.DefaultPath
+	if fs.NArg() == 1 {
+		path = fs.Arg(0)
+	}
+	c, source, ok := load(path, stderr)
+	if !ok {
+		return 1
+	}
+	files, err := compile.Compile(c, source, filepath.Base(path))
+	if err == nil {
+		err = files.WriteTree(*out)
+	}
+	if err != nil {
+		fmt.Fprintf(stderr, "rollgate compile: %v\n", err)
+		return 1
+	}
+	for _, p := range files.Paths() {
+		fmt.Fprintln(stdout, filepath.Join(*out, filepath.FromSlash(p)))
+	}
+	return 0
+}
+
+// load reads and validates a config, printing every problem to stderr.
+func load(path string, stderr io.Writer) (*config.Config, []byte, bool) {
+	source, err := os.ReadFile(path)
+	if err != nil {
+		fmt.Fprintf(stderr, "%s: %s %v\n", path, config.CodeUnreadable, err)
+		return nil, nil, false
+	}
+	c, err := config.Parse(source)
 	var problems config.Problems
 	switch {
 	case err == nil:
-		fmt.Fprintf(stdout, "%s: valid\n", path)
-		return 0
+		return c, source, true
 	case errors.As(err, &problems):
 		for _, p := range problems {
 			fmt.Fprintf(stderr, "%s: %s\n", path, p)
 		}
 		fmt.Fprintf(stderr, "%s: %d problem(s); see docs/config-spec.md#validation-rules\n", path, len(problems))
-		return 1
 	default:
 		fmt.Fprintf(stderr, "%s: %v\n", path, err)
-		return 1
 	}
+	return nil, nil, false
 }

@@ -27,8 +27,8 @@ An agent's claim that something works is not evidence. A passing test in CI is.
 
 ## Golden tests
 
-- Each case is a directory: `router.toml` plus the `expected/` file tree.
-- `make golden-update` *(planned)* regenerates the expected files. The diff must be reviewed in the PR; never regenerate golden files just to make a failing test pass.
+- Each case is a directory: `router.toml` plus the `expected/` file tree. The `example` case must be an exact copy of `examples/router.toml`; the test enforces it.
+- `make golden-update` regenerates the expected files. The diff must be reviewed in the PR; never regenerate golden files just to make a failing test pass.
 - Every bug fixed in the compiler gets a new golden case that reproduces it.
 
 ## Namespace tests (L2)

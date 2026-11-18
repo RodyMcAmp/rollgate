@@ -45,6 +45,16 @@ type Interface struct {
 	Addr netip.Prefix `toml:"-"` // router address and prefix; invalid when IPv4 is "dhcp"
 }
 
+// Device is the Linux network device name for this interface: its match_device,
+// or else its name (a .link file renames the port to it). See the spec's
+// "How names map to devices".
+func (in Interface) Device() string {
+	if in.MatchDevice != "" {
+		return in.MatchDevice
+	}
+	return in.Name
+}
+
 type VLAN struct {
 	Name         string `toml:"name"`
 	Parent       string `toml:"parent"`
