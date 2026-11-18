@@ -32,9 +32,11 @@ golden-update:
 rollgate:
 	cd compiler && CGO_ENABLED=0 go build -trimpath -o ../$(BUILD_DIR)/rollgate ./cmd/rollgate
 
-## L2: load the generated firewall and sysctl settings into network namespaces and
-## check real traffic against the policy (tests/netns/run.sh). Needs root.
+## L2: check the compiled example with the daemons' own checkers (as rollgate apply
+## will), then load the generated firewall and sysctl settings into network
+## namespaces and check real traffic against the policy (tests/netns/run.sh). Needs root.
 test-netns: rollgate
+	cd compiler && $(SUDO) env ROLLGATE_REAL_CHECKS=1 go test -count=1 -run 'TestPrecheckReal' -v ./apply/
 	$(SUDO) ROLLGATE=$(BUILD_DIR)/rollgate bash tests/netns/run.sh
 
 ## Build the disk image at the date in image/snapshot-date.

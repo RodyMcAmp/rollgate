@@ -33,7 +33,9 @@ An agent's claim that something works is not evidence. A passing test in CI is.
 
 ## Namespace tests (L2)
 
-`make test-netns` runs `tests/netns/run.sh`. Topology built with `ip netns`:
+`make test-netns` first runs `TestPrecheckReal` (`compiler/apply`): the checks `rollgate apply` will run before installing anything (`nft -c`, `dnsmasq --test`, `unbound-checkconf`, `sshd -t`), with the real programs, on the compiled example. It also breaks each file and confirms each checker rejects it.
+
+Then it runs `tests/netns/run.sh`. Topology built with `ip netns`:
 
 ```
 [rg-wan] ──veth── [rg-router] ──veth── [rg-lan]
