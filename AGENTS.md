@@ -11,9 +11,10 @@ and for humans who want the short version. Read this whole file before changing 
 dnsmasq, Unbound). Packages come from Arch's stable repos, pinned to a dated snapshot
 that has passed our test suite. Every update can be rolled back from the boot menu.
 
-Status: **M1 (bootable image) is done**: the image builds and passes the L3 boot test and
-rollback rehearsal in CI (Arch snapshot 2026-11-16). It is not a router yet; that starts
-with M2 (the config compiler). Anything marked
+Status: **M2 (config compiler) is done**: the image builds and passes the L3 boot test and
+rollback rehearsal in CI (Arch snapshot 2026-11-16), and `rollgate` compiles `router.toml`
+into configs proven by golden and L2 tests. The image doesn't install them yet; that is
+M3 (safe apply). Anything marked
 *(planned)* doesn't exist until the milestone in `docs/roadmap.md` delivers it.
 
 ## Hard rules (never break these)
@@ -65,7 +66,7 @@ with M2 (the config compiler). Anything marked
 | `tests/vm/` | L3 QEMU boot test and rollback rehearsal. |
 | `tests/golden/` | L1 golden tests: each `<case>/router.toml` and the exact files it must compile to. |
 | `tests/netns/` | L2 namespace test: `run.sh`, its `router.toml`, a TCP listener and a DHCP/DNS probe. |
-| `compiler/` | Go source for the `rollgate` CLI (M2, in progress): `validate`, `compile` (networkd, sysctl, nftables, dnsmasq, Unbound, sshd), `diff` and `schema` work; `apply` is *(planned)*. Templates are in `compiler/templates/`. |
+| `compiler/` | Go source for the `rollgate` CLI: `validate`, `compile` (networkd, sysctl, nftables, dnsmasq, Unbound, sshd, IPv6 auto), `diff` and `schema` work; `apply` is *(planned, M3)*. Templates are in `compiler/templates/`. |
 | `packaging/` *(planned)* | PKGBUILDs for our own packages (e.g. `rollgate` itself). |
 
 ## Commands
@@ -78,7 +79,7 @@ Run `image` and `test-vm` on an Arch host as root (or with sudo); see `docs/dev-
 | `make rollgate` | Builds the static `rollgate` CLI into `build/rollgate`. |
 | `make golden-update` | Rewrites `tests/golden/*/expected/` from the compiler. Review the diff; never use it just to make a failing test pass. |
 | `make image` | Builds `build/rollgate-<date>.img` at the date in `image/snapshot-date`. |
-| `make test-vm` | L3: boots the image in QEMU under UEFI with both kernels and checks for a clean boot. More end-to-end checks are added in M2. |
+| `make test-vm` | L3: boots the image in QEMU under UEFI with both kernels and checks for a clean boot. Network checks on the booted image are added in M3. |
 | `make test-rollback` | L3: rollback rehearsal. Bad update → boot the pre-update snapshot from the GRUB menu → `rollgate-snapshot-rollback` → restored system boots. Follows `docs/runbooks/recovery.md`; keep the two in sync. |
 | `make test-netns` | L2: loads the generated firewall and sysctl settings into network namespaces, runs dnsmasq and sshd with their generated configs, and checks real traffic: firewall policy, NAT, port forwards, DHCP, local DNS and SSH logins (needs root). |
 | `make test-update` *(planned, M4)* | L4: installs the previous release, updates to this one, forces a failure, verifies rollback. |

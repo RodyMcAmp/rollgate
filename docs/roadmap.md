@@ -20,13 +20,17 @@ Architecture, config spec draft, ADRs 0001–0008, the agent and contributor pro
 - CI green on GitHub 2026-11-18 (L0, image build, `make test-vm`, `make test-rollback`; build + tests about 5 minutes).
   The first run found two more issues, both fixed: a gpg-agent left by `pacstrap -K` kept the target busy in the container, and GRUB 2.16 copied the runner's firmware boot entries into the menu.
 
-## M2 — Compiler v0
+## M2 — Compiler v0 ✅ (2026-11-18)
 
 - `compiler/`: Go CLI with `validate`, `compile`, `diff`. JSON Schema export.
 - Templates for networkd, nftables, dnsmasq, Unbound, sysctl, sshd.
 - Golden tests for `examples/router.toml` plus edge cases. L2 namespace tests for firewall policy, NAT, and port forwards.
 - `ipv6 = "auto"`: ULA prefix generation, prefix delegation handling, router advertisements (ADR 0008).
 - Done when: the example config compiles, and L2 proves lan→wan works, iot→lan is blocked over both IPv4 and IPv6, the port forward works, and WAN can't reach SSH.
+- Delivered 2026-11-18 in PRs #2–#4, #7–#12; CI green (L0+L1, L2, L3).
+  `rollgate validate`, `compile`, `diff` and `schema` work. Golden tests cover the example and two edge cases (IPv6 off with `match_device`, DNS over TLS forwarding).
+  L2 runs the generated nftables ruleset and sysctl settings, dnsmasq and sshd in network namespaces and checks every "done when" item over IPv4 and IPv6, plus DHCP leases, local names and SSH key logins.
+- Moved to M3: router advertisements and prefix delegation need networkd running, so they are tested in L3 once `apply` installs the compiled files on the image.
 
 ## M3 — Safe apply
 
