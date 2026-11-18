@@ -1,0 +1,4 @@
+#!/bin/sh
+# rollgate health check (docs/architecture.md#health-checks): the WAN interface has an address and the default route goes through it.
+# The logic is in rollgate (compiler/health); exit 0 passes.
+exec /usr/bin/rollgate check wan

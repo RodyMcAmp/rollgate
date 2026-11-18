@@ -74,3 +74,4 @@ This exact sequence is tested automatically on every release (`make test-rollbac
 | `nft list ruleset \| less` | The firewall rules that are actually loaded |
 | `snapper list` | Snapshots and their numbers |
 | `rollgate status` | Which settings are running, whether a change is waiting for `rollgate confirm`, and the recent history |
+| `rollgate health` | Whether the firewall, WAN, DNS, SSH and services are all working, one line each |

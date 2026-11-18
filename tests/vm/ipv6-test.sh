@@ -65,10 +65,10 @@ for tool in qemu-system-x86_64 ssh ssh-keygen ip dnsmasq go ping; do
   command -v "$tool" >/dev/null || die "missing '$tool' (see docs/dev-setup.md)"
 done
 if [[ -w /dev/kvm ]]; then
-  accel=(-accel kvm -cpu host); timeout_s=180
+  accel=(-accel kvm -cpu host); timeout_s=420 # boot waits for the health checks, up to 300 s
 else
   echo "ipv6-test: /dev/kvm not available, using slow software emulation" >&2
-  accel=(-accel tcg); timeout_s=900
+  accel=(-accel tcg); timeout_s=1200
 fi
 
 work=$(mktemp -d)
@@ -245,6 +245,10 @@ client_has "2001:db8:" && die "the client has a public IPv6 address though the I
 echo "    client: local IPv6 in $(net64 "$ula")::/64 only, router reachable at ${ula%/64}"
 failed=$(vm 'systemctl --failed --no-legend --plain' | tr -d '\r')
 [[ -z $failed ]] || die "failed units without ISP IPv6: $failed"
+# Missing IPv6 from the ISP is never a health-check failure (ADR 0008).
+health=$(vm 'rollgate health -wait 60' 2>&1) || die "health checks fail without ISP IPv6:
+$health"
+echo "    health checks pass without ISP IPv6"
 
 log "2. the ISP turns IPv6 on (router.toml unchanged)"
 start_isp_dnsmasq --enable-ra --dhcp-range=2001:db8:ffff::,ra-only,64,1h --ra-param=eth0,10
@@ -275,5 +279,8 @@ pids+=($!)
 sleep 1
 isp timeout 5 bash -c "exec 3<>/dev/tcp/$client_addr/8080" 2>/dev/null && die "the internet can connect to the client"
 echo "    the internet can't reach the client (inbound default-deny)"
+health=$(vm 'rollgate health -wait 60' 2>&1) || die "health checks fail with ISP IPv6:
+$health"
+echo "    health checks pass with ISP IPv6"
 
 log "PASS: ipv6 = auto works with and without ISP IPv6 (log: $serial)"

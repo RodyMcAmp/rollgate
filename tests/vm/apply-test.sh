@@ -49,10 +49,10 @@ for tool in qemu-system-x86_64 ssh ssh-keygen; do
 done
 
 if [[ -w /dev/kvm ]]; then
-  accel=(-accel kvm -cpu host); timeout_s=180
+  accel=(-accel kvm -cpu host); timeout_s=420 # boot waits for the health checks, up to 300 s
 else
   echo "apply-test: /dev/kvm not available, using slow software emulation" >&2
-  accel=(-accel tcg); timeout_s=900
+  accel=(-accel tcg); timeout_s=1200
 fi
 
 work=$(mktemp -d)
@@ -105,6 +105,14 @@ check_good_config() {
   expect "services" "^active
 active$" 'systemctl is-active dnsmasq unbound'
   expect "placeholder networking removed" "^gone$" 'test -e /etc/systemd/network/99-rollgate-unconfigured.network || echo gone'
+  check_health
+}
+
+# check_health: every health check passes (docs/architecture.md#health-checks).
+check_health() {
+  local out
+  out=$(vm 'rollgate health -wait 60' 2>&1) || die "health checks fail:
+$out"
 }
 
 log "preparing a copy of the image with a throwaway SSH key"
@@ -139,6 +147,9 @@ qemu_pid=$!
 log "boot 1: fresh image"
 wait_for_boot 1
 expect "fresh status" "Nothing has been applied yet" 'rollgate status'
+check_health
+expect "health service" "^active$" 'systemctl is-active rollgate-health.service'
+echo "    health checks pass on the fresh image"
 
 log "1. a config naming a missing key file is refused"
 expect "missing key refused" 'laptop\.pub.*missing or empty' 'rollgate apply /root/missing-key.toml'

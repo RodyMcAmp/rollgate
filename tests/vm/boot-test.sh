@@ -30,10 +30,10 @@ for tool in qemu-system-x86_64 grub-editenv; do
 done
 
 if [[ -w /dev/kvm ]]; then
-  accel=(-accel kvm -cpu host); timeout_s=180
+  accel=(-accel kvm -cpu host); timeout_s=420 # boot waits for the health checks, up to 300 s
 else
   echo "boot-test: /dev/kvm not available, using slow software emulation" >&2
-  accel=(-accel tcg); timeout_s=900
+  accel=(-accel tcg); timeout_s=1200
 fi
 
 work=$(mktemp -d)

@@ -163,7 +163,7 @@ while IFS= read -r dir; do
 done < <(cd "$image_dir/rootfs" && find . -mindepth 1 -type d -printf '%P\n')
 while IFS= read -r file; do
   case $file in
-    usr/local/sbin/* | usr/local/lib/rollgate/*) mode=0755 ;;
+    usr/local/sbin/* | usr/local/lib/rollgate/* | usr/lib/rollgate/health.d/*) mode=0755 ;;
     *) mode=0644 ;;
   esac
   install -m "$mode" "$image_dir/rootfs/$file" "$mnt/$file"
@@ -233,7 +233,7 @@ grub-mkconfig -o /efi/grub/grub.cfg
 
 systemctl enable systemd-networkd.service systemd-resolved.service sshd.service \
   nftables.service grub-btrfsd.service snapper-cleanup.timer \
-  rollgate-boot-report.service rollgate-boot.service
+  rollgate-boot-report.service rollgate-boot.service rollgate-health.service
 # The CLI runs on the target (a static binary needs nothing from it).
 rollgate help >/dev/null
 # Nothing in M1 needs network-online, and unplugged ports would make it time out.

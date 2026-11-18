@@ -1,0 +1,4 @@
+#!/bin/sh
+# rollgate health check (docs/architecture.md#health-checks): sshd accepts connections on the management networks.
+# The logic is in rollgate (compiler/health); exit 0 passes.
+exec /usr/bin/rollgate check ssh

@@ -1,0 +1,4 @@
+#!/bin/sh
+# rollgate health check (docs/architecture.md#health-checks): networkd, sshd, Unbound and dnsmasq are running.
+# The logic is in rollgate (compiler/health); exit 0 passes.
+exec /usr/bin/rollgate check services

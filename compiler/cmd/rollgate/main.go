@@ -18,6 +18,7 @@ import (
 	"github.com/RodyMcAmp/rollgate/compiler/apply"
 	"github.com/RodyMcAmp/rollgate/compiler/compile"
 	"github.com/RodyMcAmp/rollgate/compiler/config"
+	"github.com/RodyMcAmp/rollgate/compiler/health"
 )
 
 const usage = `usage: rollgate <command> [arguments]
@@ -43,6 +44,13 @@ changing the router (as root; docs/architecture.md#safe-apply):
                            router.toml has changes that aren't applied
   rollback-config [N]      put generation N's router.toml back (default: the
                            confirmed one before the current) and apply it
+
+health (docs/architecture.md#health-checks):
+  health [-wait SECONDS]   run the checks in ` + health.Dir + `; with -wait,
+                           retry every 10 s until all pass or the time is up.
+                           Exit 0 if all pass
+  check NAME               run one built-in check (` + "firewall, wan, dns, ssh, services" + `);
+                           the scripts in health.d call this
 `
 
 func main() {
@@ -132,6 +140,24 @@ func run(args []string, stdout, stderr io.Writer) int {
 			}
 			return applyFile(s, config.DefaultPath, stderr)
 		}, stdout, stderr)
+	case "health":
+		return healthCmd(args[1:], stdout, stderr)
+	case "check":
+		if len(args) != 2 || health.Checks[args[1]] == nil {
+			fmt.Fprint(stderr, usage)
+			return 2
+		}
+		env, err := health.SystemEnv("/")
+		if err != nil {
+			fmt.Fprintf(stderr, "%s: couldn't read the running config: %v\n", args[1], err)
+			return 1
+		}
+		ok, detail := health.Checks[args[1]](env)
+		fmt.Fprintln(stdout, detail)
+		if !ok {
+			return 1
+		}
+		return 0
 	case "help", "-h", "--help":
 		fmt.Fprint(stdout, usage)
 		return 0
@@ -139,6 +165,28 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "rollgate: unknown command %q\n\n%s", args[0], usage)
 		return 2
 	}
+}
+
+// healthCmd runs the health checks: exit 0 if all pass, 1 if any fails.
+func healthCmd(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("health", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	wait := fs.Int("wait", 0, "retry for up to this many seconds until all checks pass")
+	if err := fs.Parse(args); err != nil || fs.NArg() > 0 || *wait < 0 {
+		fmt.Fprint(stderr, usage)
+		return 2
+	}
+	const perCheck, interval = 15 * time.Second, 10 * time.Second
+	results, err := health.Wait(health.Dir, perCheck, interval, time.Duration(*wait)*time.Second, time.Now, time.Sleep)
+	if err != nil {
+		fmt.Fprintf(stderr, "rollgate health: %v\n", err)
+		return 1
+	}
+	health.Print(stdout, results)
+	if !health.AllOK(results) {
+		return 1
+	}
+	return 0
 }
 
 // system is the real router: root /, real programs.

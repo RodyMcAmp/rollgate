@@ -122,15 +122,17 @@ M1 ships a simpler interim mechanism: snap-pac pre/post snapshots, with rollback
 
 ### Health checks
 
-Each check is a small executable in `/usr/lib/rollgate/health.d/` that exits with status 0 to pass.
-The initial set:
+Each check is a small executable in `/usr/lib/rollgate/health.d/` that exits with status 0 to pass and prints one line saying what it saw.
+`rollgate health` runs them all; `rollgate-health.service` runs it at every boot and waits up to 5 minutes for all of them to pass (the trial-boot decision is ADR 0011, *planned*).
+The checks rollgate ships are one-line scripts calling `rollgate check <name>`, so their logic is in Go and tested (`compiler/health`). Before the first apply, the checks that need a config are skipped or relaxed.
 
-- The WAN interface has an address and a default route exists.
-- The local resolver answers a known name, through both dnsmasq and Unbound.
-- The nftables ruleset is loaded and contains the `rollgate` tables.
-- dnsmasq is running and listening on every LAN interface.
-- sshd is listening on the management addresses.
-- No failed units among those rollgate manages.
+| Script | Passes when |
+|---|---|
+| `10-firewall` | the nftables ruleset is loaded and has the `rollgate` table |
+| `20-wan` | the WAN interface has an IPv4 address and the default route goes through it (before the first apply: any default route) |
+| `30-dns` | Unbound answers, and dnsmasq answers on loopback and on every network with a `[dhcp]` section. The query is for a name under `localhost.`, which Unbound answers itself, so it works without internet access |
+| `40-ssh` | sshd accepts TCP connections on every management network's address |
+| `50-services` | networkd, sshd, Unbound and dnsmasq are running (`nftables.service` loads the ruleset and exits, so `10-firewall` checks the ruleset instead) |
 
 Missing IPv6 from the ISP is never a health-check failure. It's a normal state (ADR 0008).
 
