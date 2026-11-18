@@ -11,7 +11,7 @@ jobs:
     name: L0 checks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       # ubuntu-latest ships shellcheck and Python 3.11+ (tomllib).
       - run: make check
 
@@ -24,7 +24,7 @@ jobs:
       # Loop devices for the filesystem images, /dev/kvm for QEMU.
       options: --privileged
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install build tools
         run: |
           pacman-key --init
@@ -39,7 +39,7 @@ jobs:
         run: make test-rollback
       - name: Keep serial logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: serial-logs
           path: build/test-logs/

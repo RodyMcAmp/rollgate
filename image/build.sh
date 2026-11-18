@@ -44,7 +44,34 @@ mnt="$work/mnt"
 out="$build_dir/rollgate-$date.img"
 loops=()
 
+# Stop processes that still hold the target open, so it can be unmounted.
+# pacstrap -K starts a gpg-agent for the target's keyring; without /run/user/0 (as in
+# CI containers) its sockets live inside the target. Anything else is logged by name.
+release_target() {
+  gpgconf --homedir "$mnt/etc/pacman.d/gnupg" --kill all 2>/dev/null || true
+  local proc link pid users=()
+  for proc in /proc/[0-9]*; do
+    for link in "$proc/root" "$proc/cwd" "$proc"/fd/*; do
+      if [[ $(readlink "$link" 2>/dev/null) == "$mnt"/* ]]; then
+        users+=("${proc#/proc/}")
+        break
+      fi
+    done
+  done
+  ((${#users[@]})) || return 0
+  for pid in "${users[@]}"; do
+    log "stopping process $pid, still using the target: $(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null)"
+    kill "$pid" 2>/dev/null || true
+  done
+  for _ in 1 2 3 4 5; do
+    kill -0 "${users[@]}" 2>/dev/null || return 0
+    sleep 1
+  done
+  kill -9 "${users[@]}" 2>/dev/null || true
+}
+
 cleanup() {
+  release_target
   umount -R "$mnt" 2>/dev/null || true
   for loop in "${loops[@]}"; do losetup -d "$loop" 2>/dev/null || true; done
 }
@@ -214,6 +241,7 @@ grub_cfg="$mnt/efi/grub/grub.cfg"
 grep -q "vmlinuz-linux-lts" "$grub_cfg" || die "grub.cfg has no linux-lts entry"
 grep -q "root=UUID=$root_uuid" "$grub_cfg" || die "grub.cfg does not boot root UUID $root_uuid"
 grep -q "rootflags=subvol=@" "$grub_cfg" || die "grub.cfg does not set rootflags=subvol=@"
+! grep -q "BootNext" "$grub_cfg" || die "grub.cfg lists the build machine's firmware boot entries"
 [[ -f $mnt/efi/EFI/BOOT/BOOTX64.EFI ]] || die "GRUB EFI binary missing from the ESP"
 grep -qa "$esp_uuid" "$mnt/efi/EFI/BOOT/BOOTX64.EFI" || die "GRUB EFI binary does not search for ESP UUID $esp_uuid"
 [[ -f $mnt/boot/vmlinuz-linux && -f $mnt/boot/vmlinuz-linux-lts ]] || die "kernels missing from /boot"
@@ -221,6 +249,7 @@ grep -qa "$esp_uuid" "$mnt/efi/EFI/BOOT/BOOTX64.EFI" || die "GRUB EFI binary doe
 world_writable=$(find "$mnt" \( -type f -o -type d \) -perm -0002 ! -perm -1000 -print -quit)
 [[ -z $world_writable ]] || die "world-writable path in image: ${world_writable#"$mnt"}"
 
+release_target
 umount -R "$mnt"
 
 log "assembling disk image"

@@ -30,6 +30,8 @@ The design docs originally assumed mkosi. While implementing, three problems cam
   Because the ESP was an unpartitioned image at build time, `grub-install` embedded the location `()/grub`, and the first test boot stopped at `grub rescue>`.
 - Overlay files from `image/rootfs/` are installed with explicit modes (0644, or 0755 for scripts), never the checkout's: a WSL checkout of a Windows folder makes everything 0777.
   The build fails if any world-writable path ends up in the image.
+- `GRUB_DISABLE_BOOTNEXT=true`: GRUB 2.16 otherwise copies the build machine's firmware boot entries into the router's menu (the first CI run showed the runner's "Ubuntu" entry). The build fails if any appear.
+- Before unmounting, the build stops the gpg-agent that `pacstrap -K` starts, and any other process still using the target, logging each one. In CI containers there is no `/run/user/0`, so the agent's sockets live inside the target and the unmount failed with "target is busy".
 - The initramfs is built without `autodetect`, because the build machine is not the target machine.
 - M1 placeholders, all replaced by compiler output in M2: DHCP on every wired port, an nftables ruleset that drops everything inbound except SSH, and systemd-resolved for DNS.
 - Console access: root has no password until the owner sets one, as on OpenWrt; `/etc/issue` reminds them at the login prompt. SSH accepts keys only (`image/authorized_keys`, never committed), so the empty password can't be used remotely.

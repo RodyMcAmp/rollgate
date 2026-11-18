@@ -14,3 +14,6 @@ GRUB_DISABLE_SUBMENU=y
 GRUB_TOP_LEVEL="/boot/vmlinuz-linux"
 GRUB_DISABLE_RECOVERY=true
 GRUB_DISABLE_OS_PROBER=true
+# GRUB 2.16+ copies the firmware's boot entries into the menu. At build time those are
+# the build machine's; on a router they only clutter the recovery menu (docs/runbooks).
+GRUB_DISABLE_BOOTNEXT=true
