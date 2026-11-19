@@ -101,9 +101,12 @@ rollgate status        the config generation, the release, and the last update
 
 ## Notes
 
-- **Tested:** the VM's disk and network hardware (NVMe, vmxnet3) and this guide's `router.toml`, in QEMU emulating that hardware: `rollgate apply`, confirm over SSH at 192.168.50.2, and all health checks.
-  The initramfs also carries drivers for VMware's other disk controllers (SATA, LSI Logic, LSI SAS, paravirtual SCSI). Running in VMware Workstation itself is the first step of M5 *(planned)*.
-- **Watchdog:** VMware's virtual hardware is expected to have no watchdog Linux can use (to be confirmed on the first run), so rollgate falls back to its software watchdog. The boot report (`journalctl -b -u rollgate-boot-report`) shows `watchdog=Software_Watchdog:active`.
+- **Tested:**
+  - **In VMware Workstation 17.6.3 on Windows 11, by hand (2026-11-19).** The 2026-11-16 release booted with no failed units, `rollgate apply` and `confirm` worked at the console, and every health check passed. WAN got its address from VMware's NAT and reached the internet, and SSH from the PC to 192.168.50.2 worked.
+  - **In CI, on every change (`make test-vmware`).** QEMU emulates the VM's NVMe disk and vmxnet3 adapters; the test applies this guide's `router.toml`, confirms over SSH and runs the health checks.
+  - The initramfs also carries drivers for VMware's other disk controllers (SATA, LSI Logic, LSI SAS, paravirtual SCSI).
+- **Watchdog:** VMware's virtual hardware has no watchdog Linux can use, so rollgate falls back to its software watchdog. The boot report (`journalctl -b -u rollgate-boot-report`) shows `watchdog=Software_Watchdog:active`.
+- **Clock:** the router doesn't sync its clock yet *(planned, M5)*. In VMware it starts from your PC's clock, so it's close enough for now.
 - **Disk size:** the disk is 8 GB. That's enough to try updates.
 - **Secure Boot** must stay off. rollgate's boot loader isn't signed for it.
 - **Two such VMs** have the same MAC addresses. Don't run them on the same networks at the same time.
