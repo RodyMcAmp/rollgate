@@ -115,11 +115,11 @@ Mechanics in ADR 0011; publishing and signing in ADR 0012.
    This regenerates the initramfs for both `linux` and `linux-lts`.
 4. Write a GRUB entry for `@next` to `/efi/grub/custom.cfg` and arm it once (GRUB's `next_entry`, which is what `grub-reboot` sets). The default entry stays `@`.
 5. Reboot into the trial. The hardware watchdog is enabled (`RuntimeWatchdogSec=` in systemd, falling back to `softdog`).
-6. `rollgate-health.service` runs the health checks. If they pass within 5 minutes, it promotes the trial by renaming: `@` becomes `@previous`, `@next` becomes `@`.
+6. `rollgate-health.service` (`rollgate health -boot`) runs the health checks. If they pass within 5 minutes, it promotes the trial: `@` and `@next` swap names in one atomic step (`mv --exchange`), then the old system (now `@next`) is renamed `@previous`. No reboot is needed.
    If they fail, it reboots. If the system hangs or panics, the watchdog or `panic=10` reboots it.
    GRUB consumed the one-shot choice, so every one of those reboots lands on the old `@`.
 
-Steps 1–5 work today (`compiler/update`, tested by `make test-trial`). Promotion, and cleaning up after a failed trial, are *planned* (M4 step 5): until then a trial is never promoted, and the next boot is `@` again.
+All six steps work (`compiler/update`, tested by `make test-trial`). The next boot of `@` after a trial that didn't promote deletes `@next` and records why in `/var/lib/rollgate/update.json`. A promotion cut short by a power loss is finished, or treated as a failed trial, on the next boot: `update.json` records `@next`'s subvolume ID before the swap, so that boot can tell whether the swap happened. `rollgate rollback` is *planned* (M4 step 5b).
 
 The running system is never modified during an update, so a failed update leaves nothing half-finished.
 M1 ships a simpler interim mechanism: snap-pac pre/post snapshots, with rollback chosen by hand from grub-btrfs.
@@ -127,7 +127,7 @@ M1 ships a simpler interim mechanism: snap-pac pre/post snapshots, with rollback
 ### Health checks
 
 Each check is a small executable in `/usr/lib/rollgate/health.d/` that exits with status 0 to pass and prints one line saying what it saw.
-`rollgate health` runs them all; `rollgate-health.service` runs it at every boot and waits up to 5 minutes for all of them to pass (the trial-boot decision is ADR 0011, *planned*).
+`rollgate health` runs them all; `rollgate-health.service` runs it at every boot and waits up to 5 minutes for all of them to pass. With `-boot` it also promotes or fails an update's trial boot, as in the update flow above.
 The checks rollgate ships are one-line scripts calling `rollgate check <name>`, so their logic is in Go and tested (`compiler/health`). Before the first apply, the checks that need a config are skipped or relaxed.
 
 | Script | Passes when |

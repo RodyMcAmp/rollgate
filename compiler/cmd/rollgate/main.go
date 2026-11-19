@@ -49,9 +49,12 @@ changing the router (as root; docs/architecture.md#safe-apply):
                            system, then reboot into it once as a trial (ADR 0011)
 
 health (docs/architecture.md#health-checks):
-  health [-wait SECONDS]   run the checks in ` + health.Dir + `; with -wait,
+  health [-wait SECONDS] [-boot]
+                           run the checks in ` + health.Dir + `; with -wait,
                            retry every 10 s until all pass or the time is up.
-                           Exit 0 if all pass
+                           Exit 0 if all pass. -boot (rollgate-health.service):
+                           also promote or fail an update's trial boot, or
+                           clean up after one (ADR 0011)
   check NAME               run one built-in check (` + "firewall, wan, dns, ssh, services" + `);
                            the scripts in health.d call this
 `
@@ -184,14 +187,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 // trial boot, reboot into it.
 func updateCmd(want string, stdout, stderr io.Writer) int {
 	return change("update", func(a apply.System) error {
-		url := os.Getenv("ROLLGATE_RELEASES_URL") // for tests; routers use the default
-		if url == "" {
-			url = update.DefaultReleasesURL
-		}
-		s := update.System{Root: a.Root, Run: a.Run, Stream: update.StreamExec, Out: stdout, Now: time.Now,
-			Get: update.HTTPGet, Verify: update.GPGVerify(filepath.Join(a.Root, update.PacmanGnupg)),
-			URL: url, Free: update.FreeBytes}
-		err := update.Prepare(s, want)
+		err := update.Prepare(updateSystem(a), want)
 		if errors.Is(err, update.ErrUpToDate) {
 			return nil
 		}
@@ -205,18 +201,46 @@ func updateCmd(want string, stdout, stderr io.Writer) int {
 	}, stdout, stderr)
 }
 
+// updateSystem is the real router for rollgate update.
+func updateSystem(a apply.System) update.System {
+	url := os.Getenv("ROLLGATE_RELEASES_URL") // for tests; routers use the default
+	if url == "" {
+		url = update.DefaultReleasesURL
+	}
+	return update.System{Root: a.Root, Run: a.Run, Stream: update.StreamExec, Out: a.Out, Now: a.Now,
+		Get: update.HTTPGet, Verify: update.GPGVerify(filepath.Join(a.Root, update.PacmanGnupg)),
+		URL: url, Free: update.FreeBytes}
+}
+
 // healthCmd runs the health checks: exit 0 if all pass, 1 if any fails.
 func healthCmd(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("health", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	wait := fs.Int("wait", 0, "retry for up to this many seconds until all checks pass")
+	boot := fs.Bool("boot", false, "at boot: also finish what an update left (ADR 0011)")
 	if err := fs.Parse(args); err != nil || fs.NArg() > 0 || *wait < 0 {
 		fmt.Fprint(stderr, usage)
 		return 2
 	}
 	const perCheck, interval = 15 * time.Second, 10 * time.Second
-	results, err := health.Wait(health.Dir, perCheck, interval, time.Duration(*wait)*time.Second, time.Now, time.Sleep)
+	check := func() ([]health.Result, error) {
+		return health.Wait(health.Dir, perCheck, interval, time.Duration(*wait)*time.Second, time.Now, time.Sleep)
+	}
+	var results []health.Result
+	var err error
+	if *boot {
+		code := change("health", func(a apply.System) error {
+			results, err = update.Boot(updateSystem(a), check)
+			return nil
+		}, stdout, stderr)
+		if code != 0 {
+			return code
+		}
+	} else {
+		results, err = check()
+	}
 	if err != nil {
+		health.Print(stdout, results)
 		fmt.Fprintf(stderr, "rollgate health: %v\n", err)
 		return 1
 	}

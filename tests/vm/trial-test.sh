@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
-# L3 trial test (docs/testing.md, ADR 0011): `rollgate update` prepares @next and
-# arms one trial boot of it.
+# L3 trial test (docs/testing.md, ADR 0011): `rollgate update` boots the update once
+# as a trial, and the trial either becomes the system or goes away, by itself.
 #
 #   1. Sign a releases.json with a throwaway key that only this VM trusts, and serve
 #      it from the host. The release is the image's own date, so pacman -Syu has
-#      little to download.
-#   2. rollgate update with no date has nothing to do. rollgate update DATE (the
-#      running date) updates @next in a chroot, writes the trial entry, records
-#      the trial and reboots.
-#   3. The next boot is the trial: / is @next, with the trial's panic=10. GRUB has
-#      cleared its one-shot choice, and a second update is refused while the trial
-#      is recorded.
-#   4. The boot after that is @ again, without anyone choosing it.
+#      little to download. rollgate update with no date has nothing to do;
+#      rollgate update DATE (the running date) installs it again.
+#   2. A trial that fails its checks: a test-only check fails on @next while a flag
+#      file exists. The trial boots from @next with panic=10, GRUB has cleared its
+#      one-shot choice, and a second update is refused. When the checks fail, it
+#      reboots by itself; the boot of @ deletes @next and records why it failed.
+#   3. A trial that passes: it becomes @ without a reboot (@ becomes @previous),
+#      and the next boot is the updated system.
 #
-# Promotion and the clean-up of a failed trial are M4 step 5; this test grows then.
+# The image's health wait is 5 minutes; the test shortens it to 90 s with a drop-in.
 #
 # Usage:  sudo tests/vm/trial-test.sh build/rollgate-<date>.img
 # Env:    LOG_DIR, OVMF_CODE, OVMF_VARS as in boot-test.sh; SSH_PORT (default 2226)
@@ -123,6 +123,20 @@ gpgconf --homedir "$work/keyring" --kill all 2>/dev/null || true
 cp -a "$work/keyring/." "$work/root/etc/pacman.d/gnupg/"
 find "$work/root/etc/pacman.d/gnupg" -type s -delete
 echo "$fpr" >> "$work/root/usr/lib/rollgate/release-keys"
+# A check that fails on a trial boot while the flag exists (/var/lib/rollgate is
+# shared by every root, so the test can set the flag from @).
+cat > "$work/root/usr/lib/rollgate/health.d/99-trial-test" <<'EOF'
+#!/bin/sh
+if [ -e /var/lib/rollgate/fail-trial ] && [ "$(findmnt -no FSROOT /)" = /@next ]; then
+  echo "failing on purpose (trial test)"
+  exit 1
+fi
+echo "not failing"
+EOF
+chmod 0755 "$work/root/usr/lib/rollgate/health.d/99-trial-test"
+install -d "$work/root/etc/systemd/system/rollgate-health.service.d"
+printf '[Service]\nExecStart=\nExecStart=/usr/bin/rollgate health -boot -wait 90\n' \
+  > "$work/root/etc/systemd/system/rollgate-health.service.d/10-trial-test.conf"
 if [[ -n ${ROLLGATE:-} ]]; then
   echo "    testing $ROLLGATE instead of the image's rollgate"
   install -m 0755 "$ROLLGATE" "$work/root/usr/bin/rollgate"
@@ -147,35 +161,84 @@ qemu-system-x86_64 -machine q35 -m 1024 -smp 2 "${accel[@]}" \
   -serial file:"$serial" &
 qemu_pid=$!
 
+# wait_until <what> <seconds> <command>: waits until a command succeeds in the VM.
+wait_until() {
+  local what=$1 limit=$2 deadline=$((SECONDS + $2))
+  until vm "$3" >/dev/null 2>&1; do
+    ((SECONDS < deadline)) || die "$what: not within ${limit}s (log: $serial)"
+    kill -0 "$qemu_pid" 2>/dev/null || die "$what: QEMU exited (log: $serial)"
+    sleep 3
+  done
+}
+
+# started_cleanly: the boot finished starting with nothing failed.
+started_cleanly() {
+  expect "clean start" "^running$" 'systemctl is-system-running --wait'
+}
+
+uuid_cmd='btrfs subvolume show / | awk "\$1 == \"UUID:\" { print \$2; exit }"'
+state() { vm 'cat /var/lib/rollgate/update.json' 2>/dev/null | sed -n 's/.*"state": "\([^"]*\)".*/\1/p'; }
+
+# update: runs rollgate update for the image's date; it reboots at the end, which
+# ends the SSH session.
+update() {
+  local out
+  out=$(vm "ROLLGATE_RELEASES_URL=$url rollgate update $date" 2>&1) || true
+  echo "$out" | sed -n '/Preparing the update/p; /is ready/p' | sed 's/^/    /'
+  grep -q "The update to $date is ready" <<<"$out" || die "rollgate update didn't arm a trial:
+$out"
+}
+
 log "boot 1: the image"
 wait_for_boot 1
 expect "running from @" "^/@$" 'findmnt -no FSROOT /'
+uuid_a=$(vm "$uuid_cmd" | tr -d '\r')
+[[ -n $uuid_a ]] || die "couldn't read @'s subvolume UUID"
 
 url="http://10.0.2.2:$http_port/releases.json"
-log "rollgate update"
-# The only release is the running one, so with no date there's nothing to do.
+log "rollgate update with nothing newer"
 expect "nothing newer" "Already on the newest release, $date" "ROLLGATE_RELEASES_URL=$url rollgate update"
 expect "nothing prepared" "^none$" 'test -e /var/lib/rollgate/update.json || echo none'
-# Naming the running date installs it again. It reboots at the end, which ends the
-# SSH session.
-out=$(vm "ROLLGATE_RELEASES_URL=$url rollgate update $date" 2>&1) || true
-echo "$out" | sed -n '/Preparing the update/p; /is ready/p' | sed 's/^/    /'
-grep -q "The update to $date is ready" <<<"$out" || die "rollgate update didn't arm a trial:
-$out"
 
-log "boot 2: the trial boot of @next"
-wait_for_boot 2
-expect "running from @next" "^/@next$" 'findmnt -no FSROOT /'
+log "2. a trial that fails its checks"
+vm 'touch /var/lib/rollgate/fail-trial'
+update
+wait_until "the trial boot of @next" "$timeout_s" '[ "$(findmnt -no FSROOT /)" = /@next ]'
+grep -aq "Booting \`rollgate update trial ($date)'" "$serial" || die "GRUB didn't boot the trial entry (log: $serial)"
 expect "trial kernel options" "rootflags=subvol=@next .*panic=10" 'cat /proc/cmdline'
 expect "GRUB used up the one-shot choice" "^next_entry=$" 'grub-editenv /efi/grub/grubenv list | grep next_entry || echo next_entry='
-expect "trial recorded" "\"state\": \"trial\"" 'cat /var/lib/rollgate/update.json'
 expect "second update refused" "hasn't finished its trial" 'rollgate update'
-echo "    / is @next with panic=10; the one-shot choice is gone"
+echo "    the trial booted from @next with panic=10; GRUB cleared its one-shot choice"
+wait_until "the boot of @ after the failed trial" $((2 * timeout_s)) \
+  '[ "$(findmnt -no FSROOT /)" = /@ ] && grep -q "\"state\": \"failed\"" /var/lib/rollgate/update.json'
+started_cleanly
+[[ $(vm "$uuid_cmd" | tr -d '\r') == "$uuid_a" ]] || die "after the failed trial, / isn't the original @"
+expect "why it failed" "99-trial-test: failing on purpose" 'cat /var/lib/rollgate/update.json'
+expect "@next deleted" "^gone$" 'btrfs subvolume list / | grep -q " path @next$" || echo gone'
+expect "trial entry removed" "^gone$" 'grep -q rollgate-trial /efi/grub/custom.cfg || echo gone'
+echo "    it rebooted by itself into the original @, which deleted @next and recorded why"
 
-log "boot 3: any later boot is @ again"
+log "3. a trial that passes"
+vm 'rm /var/lib/rollgate/fail-trial'
+update
+wait_until "promotion on the trial boot" "$timeout_s" \
+  '[ "$(findmnt -no FSROOT /)" = /@ ] && grep -q "\"state\": \"promoted\"" /var/lib/rollgate/update.json'
+grep -ac "Booting \`rollgate update trial ($date)'" "$serial" | grep -qx 2 || die "the second update didn't boot as a trial (log: $serial)"
+uuid_b=$(vm "$uuid_cmd" | tr -d '\r')
+[[ -n $uuid_b && $uuid_b != "$uuid_a" ]] || die "the promoted system is the original @ ($uuid_b)"
+expect "the original @ is @previous" "uuid $uuid_a path @previous$" 'btrfs subvolume list -u /'
+expect "no @next left" "^gone$" 'btrfs subvolume list / | grep -q " path @next$" || echo gone'
+expect "previous system entry" "menuentry 'rollgate previous system \($date\)' --id rollgate-previous" 'cat /efi/grub/custom.cfg'
+expect "fstab points at @" "subvol=/@[[:space:]]" 'grep -E "[[:space:]]/[[:space:]]" /etc/fstab'
+echo "    promoted without a reboot: the trial is @, the original is @previous"
+old_boot=$(vm 'cat /proc/sys/kernel/random/boot_id' | tr -d '\r')
 vm systemctl reboot 2>/dev/null || true
-wait_for_boot 3
-expect "back on @" "^/@$" 'findmnt -no FSROOT /'
+wait_until "the boot after promotion" "$timeout_s" "[ \"\$(cat /proc/sys/kernel/random/boot_id)\" != $old_boot ]"
+started_cleanly
+expect "running from @" "^/@$" 'findmnt -no FSROOT /'
+[[ $(vm "$uuid_cmd" | tr -d '\r') == "$uuid_b" ]] || die "after a reboot, / isn't the promoted system"
 expect "normal kernel options" "rootflags=subvol=@ " 'cat /proc/cmdline'
+[[ $(state) == promoted ]] || die "update.json changed on the boot after promotion: $(state)"
+echo "    the next boot is the updated system"
 
-log "PASS: rollgate update arms exactly one trial boot of @next (log: $serial)"
+log "PASS: a failing trial goes away and a passing one becomes the system, by themselves (log: $serial)"

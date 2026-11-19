@@ -1,7 +1,9 @@
 # Runs the health checks once per boot (docs/architecture.md#health-checks).
 # Waits up to 5 minutes for them all to pass, for example while WAN gets its
 # address; the unit fails if they don't, so `systemctl --failed` shows it.
-# M4 adds the trial-boot decision (ADR 0011).
+# With -boot it also finishes what an update left: it promotes a trial boot
+# whose checks pass, reboots one whose checks fail, and cleans up after a trial
+# that didn't promote (ADR 0011).
 [Unit]
 Description=rollgate: health checks
 After=network.target systemd-networkd.service nftables.service sshd.service unbound.service dnsmasq.service
@@ -9,7 +11,7 @@ After=network.target systemd-networkd.service nftables.service sshd.service unbo
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/usr/bin/rollgate health -wait 300
+ExecStart=/usr/bin/rollgate health -boot -wait 300
 
 [Install]
 WantedBy=multi-user.target

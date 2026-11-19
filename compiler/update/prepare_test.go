@@ -32,6 +32,7 @@ type fakeSystem struct {
 	pacman   func(next string) error // what pacman -Syu does to @next
 	stateAt  string                  // update.json's state when grub-editenv ran
 	verified bool
+	rootid   string // btrfs inspect-internal rootid /
 }
 
 func newFake(t *testing.T) *fakeSystem {
@@ -84,6 +85,17 @@ func (f *fakeSystem) Run(name string, args ...string) ([]byte, error) {
 	case name == "grub-editenv":
 		st, _ := LoadState(f.root)
 		f.stateAt = st.State
+	case name == "btrfs" && args[0] == "inspect-internal":
+		return []byte(f.rootid + "\n"), nil
+	case name == "mv" && args[0] == "--exchange":
+		a, b := args[2], args[3]
+		if err := os.Rename(a, a+".swap"); err != nil {
+			return nil, err
+		}
+		if err := os.Rename(b, a); err != nil {
+			return nil, err
+		}
+		return nil, os.Rename(a+".swap", b)
 	}
 	return nil, nil
 }

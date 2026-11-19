@@ -35,17 +35,29 @@ const minFree = 2 << 30
 
 // Update states in update.json.
 const (
-	Trial = "trial" // @next is prepared and its one trial boot is armed or running
+	Trial       = "trial"        // @next is prepared and its one trial boot is armed or running
+	TrialFailed = "trial-failed" // the trial's checks failed; the next boot of @ cleans up
+	Promoting   = "promoting"    // the checks passed and @next is becoming @
+	Promoted    = "promoted"     // the update is the system
+	Failed      = "failed"       // the update didn't become the system; @next is gone
 )
 
 // State is update.json: the last update and how far it got. It lives in
 // /var/lib/rollgate, which every root shares, so a trial boot and the next
 // boot of @ both see it.
 type State struct {
-	State   string    `json:"state"`
-	Date    string    `json:"date"` // the release being installed
-	From    string    `json:"from"` // the release being left
-	Started time.Time `json:"started"`
+	State    string    `json:"state"`
+	Date     string    `json:"date"` // the release being installed
+	From     string    `json:"from"` // the release being left
+	Started  time.Time `json:"started"`
+	Finished time.Time `json:"finished,omitzero"`
+	Reason   string    `json:"reason,omitempty"`  // why it failed
+	NextID   string    `json:"next_id,omitempty"` // @next's subvolume ID while promoting
+}
+
+// unfinished says whether st is an update that hasn't promoted or failed yet.
+func (st State) unfinished() bool {
+	return st.State == Trial || st.State == TrialFailed || st.State == Promoting
 }
 
 // LoadState reads update.json below root. A missing file is the zero State.
@@ -102,7 +114,7 @@ func FreeBytes(path string) (uint64, error) {
 	return st.Bavail * uint64(st.Bsize), nil
 }
 
-var tmpl = template.Must(template.New("").Option("missingkey=error").ParseFS(templates.FS, "grub-trial.tmpl", "mirrorlist.tmpl"))
+var tmpl = template.Must(template.New("").Option("missingkey=error").ParseFS(templates.FS, "grub-custom.tmpl", "mirrorlist.tmpl"))
 
 func render(name string, data any) ([]byte, error) {
 	var b bytes.Buffer
@@ -137,7 +149,7 @@ func Prepare(s System, want string) error {
 	if err != nil {
 		return err
 	}
-	if st.State == Trial {
+	if st.unfinished() {
 		return fmt.Errorf("the update to %s hasn't finished its trial yet", st.Date)
 	}
 	m, err := rootMount(s)
@@ -231,27 +243,63 @@ func updateNext(s System, next, date, uuid string, options []string) error {
 	if err := s.Stream(s.Out, "arch-chroot", next, "env", "SNAP_PAC_SKIP=y", "pacman", "-Syu", "--noconfirm"); err != nil {
 		return fmt.Errorf("pacman -Syu in @next failed: %w", err)
 	}
-	var initrds []string
-	for _, f := range []string{"intel-ucode.img", "amd-ucode.img", "initramfs-linux.img"} {
-		if _, err := os.Stat(filepath.Join(next, "boot", f)); err == nil {
-			initrds = append(initrds, f)
-		}
-	}
-	for _, f := range []string{"vmlinuz-linux", "initramfs-linux.img"} {
-		if _, err := os.Stat(filepath.Join(next, "boot", f)); err != nil {
-			return fmt.Errorf("@next has no /boot/%s after the update", f)
-		}
+	trial, err := bootEntry(filepath.Dir(next), "@next", "rollgate update trial ("+date+")", TrialEntry, uuid, options, true)
+	if err != nil {
+		return fmt.Errorf("after the update: %w", err)
 	}
 	if err := setRootSubvol(filepath.Join(next, fstabPath), "/@next"); err != nil {
 		return err
 	}
-	entry, err := render("grub-trial.tmpl", map[string]any{"Date": date, "UUID": uuid, "Options": options, "Initrds": initrds})
+	return writeCustom(s.Root, filepath.Dir(next), trial, uuid, options)
+}
+
+// entry is one GRUB menu entry in custom.cfg.
+type entry struct {
+	Title, ID, Subvol, UUID string
+	Options, Initrds        []string
+	Panic                   bool // reboot 10 s after a kernel panic (trial boots only)
+}
+
+// PreviousEntry is the GRUB menu entry id of the previous system.
+const PreviousEntry = "rollgate-previous"
+
+// bootEntry describes booting subvol at the top of the filesystem (top). The
+// subvolume must have a kernel and an initramfs.
+func bootEntry(top, subvol, title, id, uuid string, options []string, panic bool) (*entry, error) {
+	boot := filepath.Join(top, subvol, "boot")
+	for _, f := range []string{"vmlinuz-linux", "initramfs-linux.img"} {
+		if _, err := os.Stat(filepath.Join(boot, f)); err != nil {
+			return nil, fmt.Errorf("%s has no /boot/%s", subvol, f)
+		}
+	}
+	e := &entry{Title: title, ID: id, Subvol: subvol, UUID: uuid, Options: options, Panic: panic}
+	for _, f := range []string{"intel-ucode.img", "amd-ucode.img", "initramfs-linux.img"} {
+		if _, err := os.Stat(filepath.Join(boot, f)); err == nil {
+			e.Initrds = append(e.Initrds, f)
+		}
+	}
+	return e, nil
+}
+
+// writeCustom writes GRUB's custom.cfg: the trial entry if there is one,
+// and an entry for @previous when it exists. grub.cfg sources custom.cfg from
+// GRUB's directory (grub-mkconfig's 41_custom).
+func writeCustom(root, top string, trial *entry, uuid string, options []string) error {
+	var previous *entry
+	if _, err := os.Stat(filepath.Join(top, "@previous")); err == nil {
+		date, err := RunningRelease(filepath.Join(top, "@previous"))
+		if err != nil {
+			date = "unknown release"
+		}
+		// A previous system that can't boot just gets no entry.
+		previous, _ = bootEntry(top, "@previous", "rollgate previous system ("+date+")", PreviousEntry, uuid, options, false)
+	}
+	data, err := render("grub-custom.tmpl", map[string]*entry{"Trial": trial, "Previous": previous})
 	if err != nil {
 		return err
 	}
-	// grub.cfg sources custom.cfg from GRUB's directory (grub-mkconfig's
-	// 41_custom). The ESP is FAT, which has no file modes to set.
-	return writeAtomic(filepath.Join(s.Root, grubDir, "custom.cfg"), entry, false)
+	// The ESP is FAT, which has no file modes to set.
+	return writeAtomic(filepath.Join(root, grubDir, "custom.cfg"), data, false)
 }
 
 func (s System) run(name string, args ...string) error {
