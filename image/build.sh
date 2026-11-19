@@ -9,6 +9,8 @@
 #                        (make image-previous: the L4 test's "previous release")
 #         ROLLGATE       the static rollgate binary to install (default: $BUILD_DIR/rollgate,
 #                        built by make rollgate; make image builds it first)
+#         RELEASE_KEY_FILE  the release signing key's public half (default:
+#                        image/release-key.asc, once the maintainer has created it)
 #
 # Output: $BUILD_DIR/rollgate-<date>.img (raw GPT disk, UEFI) and a .sha256 file.
 #
@@ -201,9 +203,33 @@ echo rollgate > "$mnt/etc/hostname"
 echo LANG=C.UTF-8 > "$mnt/etc/locale.conf"
 ln -sf /usr/share/zoneinfo/UTC "$mnt/etc/localtime"
 
+# The release signing key (ADR 0012): rollgate update accepts releases.json only when
+# it is signed by a key listed in release-keys, so a router can update only if its
+# image carries the key. Until the maintainer creates it, updates stay off.
+release_key=${RELEASE_KEY_FILE:-$image_dir/release-key.asc}
+release_fpr=
+if [[ -f $release_key ]]; then
+  release_fpr=$(gpg --batch --with-colons --show-keys "$release_key" | awk -F: '$1 == "fpr" { print $10; exit }')
+  [[ $release_fpr =~ ^[0-9A-F]{40}([0-9A-F]{24})?$ ]] || die "no key fingerprint in $release_key"
+  log "trusting release key $release_fpr"
+  install -m 0644 "$release_key" "$mnt/root/release-key.asc"
+  echo "$release_fpr" >> "$mnt/usr/lib/rollgate/release-keys"
+else
+  log "no release key ($release_key): rollgate update will refuse to run on this image"
+fi
+
 log "configuring system in chroot"
 # Run from a file, not stdin, so no command inside can swallow the rest of the script.
 cat > "$mnt/root/configure.sh" <<'CHROOT'
+# The release key goes into pacman's keyring, which rollgate update checks
+# releases.json against, and is signed locally so pacman also trusts it for the
+# [rollgate] repository.
+if [[ -f /root/release-key.asc ]]; then
+  pacman-key --add /root/release-key.asc >/dev/null
+  pacman-key --lsign-key "$(tail -n 1 /usr/lib/rollgate/release-keys)" >/dev/null
+  rm /root/release-key.asc
+fi
+
 # snapper: root config pointing at the separate @snapshots subvolume. Written by hand
 # because `snapper create-config` insists on creating /.snapshots as a nested subvolume.
 install -m 0644 /usr/share/snapper/config-templates/default /etc/snapper/configs/root
@@ -274,6 +300,12 @@ grep -qa "$esp_uuid" "$mnt/efi/EFI/BOOT/BOOTX64.EFI" || die "GRUB EFI binary doe
 [[ -L $mnt/etc/systemd/system/sysinit.target.wants/rollgate-boot.service ]] || die "rollgate-boot.service not enabled"
 [[ -L $mnt/etc/systemd/system/sysinit.target.wants/rollgate-softdog.service ]] || die "rollgate-softdog.service not enabled"
 grep -qx "RuntimeWatchdogSec=30s" "$mnt/etc/systemd/system.conf.d/10-rollgate-watchdog.conf" || die "systemd watchdog not configured"
+if [[ -n $release_fpr ]]; then
+  grep -qx "$release_fpr" "$mnt/usr/lib/rollgate/release-keys" || die "release key not listed in release-keys"
+  gpg --homedir "$mnt/etc/pacman.d/gnupg" --batch --with-colons --list-keys "$release_fpr" 2>/dev/null |
+    grep -q '^pub:f:' || die "release key $release_fpr is not in pacman's keyring with full trust"
+  gpgconf --homedir "$mnt/etc/pacman.d/gnupg" --kill all 2>/dev/null || true
+fi
 # World-writable files or non-sticky directories (sticky ones like /tmp are fine).
 world_writable=$(find "$mnt" \( -type f -o -type d \) -perm -0002 ! -perm -1000 -print -quit)
 [[ -z $world_writable ]] || die "world-writable path in image: ${world_writable#"$mnt"}"

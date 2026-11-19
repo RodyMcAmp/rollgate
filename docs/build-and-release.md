@@ -56,6 +56,52 @@ Published with a detached signature, `releases.json.sig` (ADR 0012):
 
 **Security fixes** that can't wait for the weekly bump get an out-of-cycle date bump through the same pipeline. The gate is never skipped.
 
+### Publishing (`.github/workflows/release.yml`)
+
+After CI passes on `main`, the release workflow checks whether `image/snapshot-date` is already listed in the published `releases.json`. If it isn't:
+
+1. It builds that date's image and attaches it, compressed with zstd and with checksums, to the GitHub Release `release/YYYY.MM.DD`.
+2. It adds the date to `releases.json` on the `gh-pages` branch (`release/publish.sh`): the new date becomes `current`, older ones `previous`. It signs the file and checks the signature the way a router does, then pushes. Routers see the release only after this step.
+
+Without the `ROLLGATE_SIGNING_KEY` secret it publishes nothing and says so. It also refuses to sign with a key other than `image/release-key.asc`, because routers installed from that release wouldn't trust it.
+`make release-dry-run` (part of `make check`) rehearses step 2 with a throwaway key: two releases, a withdrawal, and a changed file and another key's signature being refused.
+
+**Withdrawing a release** is done by hand, on a checkout of `gh-pages`:
+
+```
+make rollgate-release
+build/rollgate-release withdraw releases.json 2026-11-16
+gpg --local-user <fingerprint> --detach-sign --output releases.json.sig releases.json
+build/rollgate-release verify releases.json <fingerprint>
+```
+
+The newest release that isn't withdrawn becomes `current` again. Commit both files and push.
+
+### Setting up the signing key (maintainer, once)
+
+ADR 0012 lists these steps. An agent can't do them, because the private key must never pass through anything but your own machine and the repository secret.
+
+1. Create the key on your own computer (Linux, WSL or macOS with gnupg):
+
+   ```
+   gpg --quick-generate-key "rollgate releases" ed25519 sign never
+   gpg --list-secret-keys --with-colons | grep '^fpr' | head -1 | cut -d: -f10
+   ```
+
+   The second command prints the fingerprint (40 characters). Without an expiry date the key can't stop updates by expiring; replacing it later needs the rotation ADR that ADR 0012 mentions.
+2. Commit the **public** key: `gpg --armor --export <fingerprint> > image/release-key.asc`, in a pull request. From then on every image trusts it.
+3. Store the **private** key as the repository secret, then delete the file:
+
+   ```
+   gpg --armor --export-secret-keys <fingerprint> > key.asc
+   gh secret set ROLLGATE_SIGNING_KEY < key.asc
+   rm key.asc
+   ```
+
+4. Keep an offline backup of the private key, for example on a USB stick kept somewhere safe (`gpg --armor --export-secret-keys <fingerprint>`). If the key is lost, routers can only be moved to a new key by reinstalling them.
+5. Turn on GitHub Pages: repository **Settings → Pages → Deploy from a branch → `gh-pages`, `/ (root)`**. The branch appears with the first release; until then, come back to this step after step 6.
+6. Start the first release: **Actions → release → Run workflow**, or merge the next date bump.
+
 ## Image build
 
 The image is built by `image/build.sh` with the standard Arch tools (`pacstrap`, `arch-chroot`, `grub-install`), following the Arch installation guide. See ADR 0009 for why it doesn't use mkosi.

@@ -1,0 +1,138 @@
+# Merge = release (docs/build-and-release.md, ADR 0012). After CI passes on main, if
+# image/snapshot-date names a date that releases.json doesn't list yet, this builds
+# that date's image, attaches it to a GitHub Release, then adds the date to
+# releases.json, signs it and publishes it on GitHub Pages (the gh-pages branch).
+# Routers see a release only once that last step is done.
+#
+# Without the ROLLGATE_SIGNING_KEY secret it publishes nothing, so an unsigned release
+# can't happen by accident. The maintainer's one-time setup is in ADR 0012.
+name: release
+
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+  # For the first release after the key is added, when no date bump has merged since.
+  workflow_dispatch:
+  # A pull request that changes this workflow runs it as a smoke test: it decides,
+  # and publishes nothing.
+  pull_request:
+    paths: [.github/workflows/release.yml, release/**]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Publish the release
+    # Only after CI passed on main: the gate is never skipped.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+      # Loop devices for the image build.
+      options: --privileged
+    env:
+      ROLLGATE_SIGNING_KEY: ${{ secrets.ROLLGATE_SIGNING_KEY }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Install git
+        run: pacman -Syu --noconfirm --needed git
+      - uses: actions/checkout@v5
+        with:
+          # The commit CI passed on, not whatever main is now.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
+      - name: Decide
+        id: decide
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          date=$(tr -d '[:space:]' < image/snapshot-date)
+          echo "date=$date" >> "$GITHUB_OUTPUT"
+          echo "tag=release/${date//-/.}" >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            echo "::notice::Pull request: a dry run, nothing is published."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ -z "$ROLLGATE_SIGNING_KEY" ]; then
+            echo "::notice::No ROLLGATE_SIGNING_KEY secret yet, so nothing is published (ADR 0012)."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git fetch -q origin gh-pages && git show origin/gh-pages:releases.json | grep -q "\"date\": \"$date\""; then
+            echo "::notice::$date is already released."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+      - name: Install build tools
+        if: steps.decide.outputs.publish == 'true'
+        run: |
+          pacman-key --init
+          pacman-key --populate archlinux
+          pacman -Syu --noconfirm --needed make arch-install-scripts btrfs-progs \
+            dosfstools gptfdisk grub go github-cli zstd
+      - name: Import the signing key
+        if: steps.decide.outputs.publish == 'true'
+        run: |
+          printf '%s\n' "$ROLLGATE_SIGNING_KEY" | gpg --batch --quiet --import
+          fpr=$(gpg --with-colons --list-secret-keys | awk -F: '$1 == "fpr" { print $10; exit }')
+          [ -n "$fpr" ] || { echo "::error::ROLLGATE_SIGNING_KEY holds no secret key"; exit 1; }
+          # Routers installed from this release must trust the key that signs it.
+          [ -f image/release-key.asc ] || { echo "::error::image/release-key.asc is missing: routers installed from this release couldn't check updates (ADR 0012)"; exit 1; }
+          image_fpr=$(gpg --batch --with-colons --show-keys image/release-key.asc | awk -F: '$1 == "fpr" { print $10; exit }')
+          [ "$fpr" = "$image_fpr" ] || { echo "::error::the signing key ($fpr) isn't image/release-key.asc ($image_fpr)"; exit 1; }
+          echo "RELEASE_KEY=$fpr" >> "$GITHUB_ENV"
+      - name: Restore package cache
+        if: steps.decide.outputs.publish == 'true'
+        uses: actions/cache@v5
+        with:
+          path: build/pkgcache
+          key: pkgcache-${{ hashFiles('image/snapshot-date', 'image/packages.txt') }}
+          restore-keys: pkgcache-
+      - name: Build the image
+        if: steps.decide.outputs.publish == 'true'
+        run: |
+          make image
+          img=build/rollgate-${{ steps.decide.outputs.date }}.img
+          zstd -T0 -10 --sparse -o "$img.zst" "$img"
+          (cd build && sha256sum "$(basename "$img").zst" > "$(basename "$img").zst.sha256")
+      - name: GitHub Release with the image
+        if: steps.decide.outputs.publish == 'true'
+        run: |
+          tag=${{ steps.decide.outputs.tag }}
+          date=${{ steps.decide.outputs.date }}
+          files=(build/rollgate-$date.img.zst build/rollgate-$date.img.zst.sha256 build/rollgate-$date.img.sha256)
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "${files[@]}" --clobber
+          else
+            gh release create "$tag" "${files[@]}" --target "$(git rev-parse HEAD)" \
+              --title "rollgate $date" \
+              --notes "Release $date: Arch Linux packages as of $date (docs/build-and-release.md). Write the image to a disk with: zstd -d rollgate-$date.img.zst -o rollgate-$date.img"
+          fi
+      - name: Publish releases.json
+        if: steps.decide.outputs.publish == 'true'
+        run: |
+          date=${{ steps.decide.outputs.date }}
+          if git rev-parse -q --verify origin/gh-pages >/dev/null; then
+            git worktree add build/site origin/gh-pages -B gh-pages
+          else
+            git worktree add --orphan -b gh-pages build/site
+          fi
+          make rollgate-release
+          release/publish.sh build/site "$date"
+          cd build/site
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Pages serves the files as they are, without Jekyll.
+          touch .nojekyll
+          git add .nojekyll releases.json releases.json.sig
+          git commit -q -m "release $date"
+          git push origin gh-pages

@@ -13,16 +13,16 @@ SUDO := $(if $(filter 0,$(shell id -u)),,sudo)
 
 SHELL_SCRIPTS := image/build.sh tests/vm/boot-test.sh tests/vm/rollback-test.sh \
 	tests/vm/apply-test.sh tests/vm/ipv6-test.sh tests/vm/trial-test.sh \
-	tests/vm/update-test.sh tests/netns/run.sh \
+	tests/vm/update-test.sh tests/netns/run.sh release/publish.sh release/dry-run.sh \
 	image/rootfs/usr/local/sbin/rollgate-snapshot-rollback \
 	image/rootfs/usr/local/lib/rollgate/boot-report
 
-.PHONY: check golden-update rollgate test-netns image image-previous test-vm test-apply \
-	test-ipv6 test-trial test-rollback test-update clean
+.PHONY: check golden-update rollgate rollgate-release release-dry-run test-netns image \
+	image-previous test-vm test-apply test-ipv6 test-trial test-rollback test-update clean
 
 ## L0 + L1: shell lint, Go format/vet/lint/tests, and the example config validates.
 ## Run before every commit.
-check:
+check: rollgate-release
 	shellcheck $(SHELL_SCRIPTS)
 	@unformatted=$$(cd compiler && gofmt -l .); \
 	  if [ -n "$$unformatted" ]; then echo "gofmt needed: $$unformatted"; exit 1; fi
@@ -30,11 +30,20 @@ check:
 	cd compiler && go run ./cmd/rollgate validate ../examples/router.toml
 	cd compiler && for f in ../tests/vm/apply/*.toml ../tests/vm/ipv6/*.toml; do go run ./cmd/rollgate validate "$$f" || exit 1; done
 	cd compiler && for f in ../tests/netns/*.go ../tests/vm/*.go; do go vet "$$f" || exit 1; done
+	bash release/dry-run.sh
 
 ## Rewrite tests/golden/*/expected and schema/router.schema.json from the compiler.
 ## Review the diff before committing; never run this just to make a failing test pass.
 golden-update:
 	cd compiler && go test ./compile -run TestGolden -update && go test ./config -run TestSchemaFile -update
+
+## The release train's releases.json tool (ADR 0012); CI only, never on a router.
+rollgate-release:
+	cd compiler && CGO_ENABLED=0 go build -trimpath -o ../$(BUILD_DIR)/rollgate-release ./cmd/rollgate-release
+
+## Rehearse publishing a release with a throwaway key (also part of check).
+release-dry-run: rollgate-release
+	bash release/dry-run.sh
 
 ## Build the rollgate CLI as a static binary (ADR 0005).
 rollgate:
