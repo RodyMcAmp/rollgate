@@ -76,6 +76,25 @@ Architecture, config spec draft, ADRs 0001–0008, the agent and contributor pro
   - Safe while live: WAN stays default-deny; management only from LAN; console login; no SSH until keys are added.
   - The same media provides the recovery runbook's planned "Rescue" entry.
   - **Keep it possible from M2 on:** the compiler and apply must work on a read-only root with a RAM overlay and must not assume state already exists (the ULA prefix is simply generated fresh on a live boot). Auto-detection writes `router.toml`; it never writes generated files.
+- **Add-ons** (proposed 2026-11-19). Optional features installed on demand, so the base router stays small. Candidates:
+  - ad blocking: Pi-hole's job, done natively with DNS blocklists (M6) instead of a second DNS server;
+  - intrusion detection/prevention: Suricata is in Arch's repositories, Snort 3 isn't;
+  - the UniFi Network controller (proprietary, Java and MongoDB: only practical in a container);
+  - UPnP/NAT-PMP (miniupnpd), dynamic DNS, an mDNS reflector across VLANs, ntopng traffic statistics, CrowdSec, Tailscale.
+
+  Design notes, to keep possible from now on:
+  - An add-on is a package from the signed `[rollgate]` repository (hard rule 1), or a container image once an ADR allows a container runtime.
+  - It's switched on and configured in `router.toml`, in a section of its own (`[addon.<name>]`). It never writes generated system files (rule 3): it declares what it needs (ports, DNS hooks, a firewall zone), and the compiler turns that into config.
+  - It's part of the snapshot, so updates and rollback cover it. A failing add-on mustn't make a good core update roll back.
+  - Its settings page plugs into the web UI (ADR 0014 keeps pages per feature).
+  - Needs an ADR for the add-on model before the first add-on.
+- **AI-assisted firewall management** (proposed 2026-11-19). An assistant that explains and proposes, while a person decides:
+  - It answers "why can't my console reach the game server?" from the config, the firewall counters and the logs.
+  - It proposes changes as a diff to `router.toml`.
+  - Nothing reaches the firewall except through validate → apply → commit-confirm (rule 2), and WAN stays default-deny whatever it suggests (rule 5).
+  - The model runs off the router (the hardware is too small), so sending logs out is opt-in.
+  - The hook is the local API from ADR 0014, with read-only access by default.
+  - Needs its own ADR.
 - Multi-WAN failover, traffic shaping (CAKE), a Proxmox VM image, our own archive mirror.
 - Opt-in IPv6 tunnel (6in4 tunnel broker) for users whose ISP has no IPv6. Needs a public IPv4 address; won't work behind carrier-grade NAT.
 - IPv6 inbound pinholes (the IPv6 equivalent of port forwards).
