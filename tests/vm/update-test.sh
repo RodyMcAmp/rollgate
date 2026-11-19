@@ -259,7 +259,8 @@ log "3. a trial whose kernel panics rolls back by itself"
 vm 'touch /var/lib/rollgate/panic-trial'
 update "$previous"
 failed_trial "kernel panic"
-grep -aq "Kernel panic - not syncing" "$serial" || die "the trial didn't panic (log: $serial)"
+# Console output from systemd can split the kernel's lines, so match on two short ones.
+grep -aqE "sysrq triggered crash|Rebooting in 10 seconds" "$serial" || die "the trial didn't panic (log: $serial)"
 expect "why it failed" "never finished its checks" 'cat /var/lib/rollgate/update.json'
 vm 'rm /var/lib/rollgate/panic-trial'
 [[ $(vm "$uuid_cmd" | tr -d '\r') == "$uuid_a" ]] || die "after two failed trials, / isn't the original system"
