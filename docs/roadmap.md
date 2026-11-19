@@ -32,19 +32,26 @@ Architecture, config spec draft, ADRs 0001–0008, the agent and contributor pro
   L2 runs the generated nftables ruleset and sysctl settings, dnsmasq and sshd in network namespaces and checks every "done when" item over IPv4 and IPv6, plus DHCP leases, local names and SSH key logins.
 - Moved to M3: router advertisements and prefix delegation need networkd running, so they are tested in L3 once `apply` installs the compiled files on the image.
 
-## M3 — Safe apply
+## M3 — Safe apply ✅ (2026-11-19)
 
 - `apply`, `confirm`, `revert`, `status`, `rollback-config` (ADR 0010). Generations in `/var/lib/rollgate`.
 - The image ships `rollgate`, dnsmasq and Unbound, and runs the compiled configs once a `router.toml` is applied.
 - L3: apply a config that cuts off management, don't confirm, and verify access returns by itself. The same after a reboot during the confirm window. Router advertisements and prefix delegation against a fake ISP.
 - Done when: it is impossible to lock yourself out through `rollgate apply`.
+- Delivered in PRs #16–#22, merged 2026-11-19; CI green.
+  `make test-apply` proves a config that locks out SSH reverts by itself: by the timer, after a reboot and after a power cut. It also proves a confirm counts only from a new connection.
+  `make test-ipv6` proves `ipv6 = "auto"` against a fake ISP: local IPv6 without one, public IPv6 by prefix delegation with one, no IPv6 NAT, and no way in from the internet.
 
-## M4 — Updates and rollback
+## M4 — Updates and rollback ✅ (2026-11-19)
 
 - Release train: weekly date-bump PRs, `releases.json`, signed `[rollgate]` repo.
 - `rollgate update`: install into a new snapshot, trial boot, health checks, watchdog, automatic promotion or rollback.
 - L4 test suite.
 - Done when: CI proves that an update which fails its health checks rolls back without anyone touching the router.
+- Delivered in PRs #25–#34 (ADRs 0011 and 0012 in #23), merged 2026-11-19 with the release signing key (#36); CI green.
+  `make test-update` (L4) installs the previous week's release, updates it to this one and proves the "done when": a trial that fails a health check, and one whose kernel panics, both roll back by themselves. A good update becomes the system, with the config and both kernels intact and `rollgate` upgraded from the signed `[rollgate]` repository.
+  `make test-trial` covers promotion, `rollgate rollback` and the "rollgate previous system" boot entry. The hardware watchdog (softdog when there's none) resets a hung kernel.
+- Open: an occasional missed WAN DHCP lease in CI VMs (#35). Since #37 the next occurrence logs networkd's view.
 
 ## M5 — Real-hardware pilot
 
