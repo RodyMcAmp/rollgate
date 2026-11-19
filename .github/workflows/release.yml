@@ -1,6 +1,7 @@
 # Merge = release (docs/build-and-release.md, ADR 0012). After CI passes on main, if
 # image/snapshot-date names a date that releases.json doesn't list yet, this builds
-# that date's image, attaches it to a GitHub Release, then adds the date to
+# that date's image, attaches it to a GitHub Release, then publishes the date's signed
+# [rollgate] package repository and adds the date to
 # releases.json, signs it and publishes it on GitHub Pages (the gh-pages branch).
 # Routers see a release only once that last step is done.
 #
@@ -78,7 +79,7 @@ jobs:
           pacman-key --init
           pacman-key --populate archlinux
           pacman -Syu --noconfirm --needed make arch-install-scripts btrfs-progs \
-            dosfstools gptfdisk grub go github-cli zstd
+            dosfstools gptfdisk grub go github-cli zstd fakeroot
       - name: Import the signing key
         if: steps.decide.outputs.publish == 'true'
         run: |
@@ -117,7 +118,7 @@ jobs:
               --title "rollgate $date" \
               --notes "Release $date: Arch Linux packages as of $date (docs/build-and-release.md). Write the image to a disk with: zstd -d rollgate-$date.img.zst -o rollgate-$date.img"
           fi
-      - name: Publish releases.json
+      - name: Publish the [rollgate] repository and releases.json
         if: steps.decide.outputs.publish == 'true'
         run: |
           date=${{ steps.decide.outputs.date }}
@@ -127,12 +128,14 @@ jobs:
             git worktree add --orphan -b gh-pages build/site
           fi
           make rollgate-release
-          bash release/publish.sh build/site "$date"
+          # rollgate for routers updating to this release, built like the image's.
+          pkg=$(bash packaging/build.sh "$date" build/rollgate build/pkg)
+          bash release/publish.sh build/site "$date" "$pkg"
           cd build/site
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           # Pages serves the files as they are, without Jekyll.
           touch .nojekyll
-          git add .nojekyll releases.json releases.json.sig
+          git add .nojekyll releases.json releases.json.sig repo
           git commit -q -m "release $date"
           git push origin gh-pages

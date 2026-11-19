@@ -1,0 +1,25 @@
+# rollgate itself (docs/build-and-release.md, "Our own packages"): the CLI, its
+# systemd units and the health checks. packaging/build.sh builds it from the static
+# binary that `make rollgate` produced and the files next to this PKGBUILD; the
+# version is the release date (2026-11-16 -> 2026.11.16), so a newer release always
+# upgrades it. The image installs it, and routers upgrade it from the signed
+# [rollgate] repository (ADR 0012).
+
+pkgname=rollgate
+pkgver=${ROLLGATE_PKGVER:?set by packaging/build.sh}
+pkgrel=1
+pkgdesc="rollgate router OS: router.toml compiler, safe apply, health checks and updates"
+arch=(x86_64)
+url="https://github.com/RodyMcAmp/rollgate"
+license=(Apache-2.0)
+# A static Go binary: nothing to strip or split into debug files.
+options=(!debug !strip)
+
+package() {
+  install -Dm0755 "$startdir/rollgate" "$pkgdir/usr/bin/rollgate"
+  install -Dm0644 -t "$pkgdir/usr/lib/systemd/system" \
+    "$startdir/rollgate-boot.service" "$startdir/rollgate-health.service"
+  install -Dm0755 -t "$pkgdir/usr/lib/rollgate/health.d" "$startdir"/health.d/*
+  install -dm0755 "$pkgdir/etc/rollgate"
+  install -dm0700 "$pkgdir/etc/rollgate/secrets"
+}

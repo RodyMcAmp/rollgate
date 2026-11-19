@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
 # Rehearses the release train's publishing with a throwaway key (make release-dry-run,
-# part of make check): two releases in a row, a withdrawal, and the checks a router
-# makes, including that a changed file or another key is refused. Changes nothing
-# outside a temporary directory.
+# part of make check): two releases in a row, each with its [rollgate] repository, a
+# withdrawal, and the checks a router makes, including that a changed file or another
+# key is refused. Changes nothing outside a temporary directory.
 set -euo pipefail
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 tool=$(realpath "${ROLLGATE_RELEASE:-$here/../build/rollgate-release}")
+binary=$(realpath "${ROLLGATE:-$here/../build/rollgate}")
 date=$(tr -d '[:space:]' < "$here/../image/snapshot-date")
 previous=$(date -u -d "$date -7 days" +%F)
 
 die() { echo "release-dry-run: FAIL: $*" >&2; exit 1; }
 [[ -x $tool ]] || die "no rollgate-release at $tool (run: make rollgate-release)"
+[[ -x $binary ]] || die "no rollgate at $binary (run: make rollgate)"
 
 work=$(mktemp -d /tmp/rgrelease.XXXX) # short: gpg-agent's socket path is limited
 cleanup() {
@@ -32,15 +34,26 @@ export GNUPGHOME=$work/gnupg ROLLGATE_RELEASE=$tool
 RELEASE_KEY=$(newkey "$GNUPGHOME")
 export RELEASE_KEY
 
-bash "$here/publish.sh" "$work/site" "$previous" >/dev/null
-bash "$here/publish.sh" "$work/site" "$date" > "$work/out"
+for d in "$previous" "$date"; do
+  bash "$here/../packaging/build.sh" "$d" "$binary" "$work/pkg" > "$work/pkg-$d"
+done
+bash "$here/publish.sh" "$work/site" "$previous" "$(cat "$work/pkg-$previous")" >/dev/null
+bash "$here/publish.sh" "$work/site" "$date" "$(cat "$work/pkg-$date")" > "$work/out"
 grep -q "\"date\": \"$previous\", \"status\": \"previous\"" "$work/out" || die "$previous isn't previous:
 $(cat "$work/out")"
 grep -q "\"date\": \"$date\", \"status\": \"current\"" "$work/out" || die "$date isn't current:
 $(cat "$work/out")"
-echo "release-dry-run: published $previous, then $date; signed and verified"
+for d in "$previous" "$date"; do
+  repo=$work/site/repo/$d/x86_64
+  for f in rollgate.db rollgate.db.sig rollgate.files "rollgate-${d//-/.}-1-x86_64.pkg.tar.zst.sig"; do
+    [[ -f $repo/$f && ! -L $repo/$f ]] || die "$repo/$f is missing or a symbolic link"
+  done
+  bsdtar -tf "$repo/rollgate.db" | grep -qx "rollgate-${d//-/.}-1/desc" || die "$repo/rollgate.db doesn't list rollgate ${d//-/.}-1"
+done
+echo "release-dry-run: published $previous, then $date, each with its signed [rollgate] repository"
 
 bash "$here/publish.sh" "$work/site" "$previous" >/dev/null 2>&1 && die "publishing an older date was accepted"
+bash "$here/publish.sh" "$work/site" "$date" "$(cat "$work/pkg-$date")" >/dev/null 2>&1 && die "a release's repository was changed"
 
 "$tool" withdraw "$work/site/releases.json" "$date"
 [[ ! -e $work/site/releases.json.sig ]] || die "withdraw left a stale signature"

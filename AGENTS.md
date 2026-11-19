@@ -68,7 +68,7 @@ M3 (safe apply). Anything marked
 | `tests/netns/` | L2 namespace test: `run.sh`, its `router.toml`, a TCP listener and a DHCP/DNS probe. |
 | `compiler/` | Go source for the `rollgate` CLI: `validate`, `compile` (networkd, sysctl, nftables, dnsmasq, Unbound, sshd, IPv6 auto), `diff`, `schema`, `apply`, `confirm`, `revert`, `status` and `rollback-config` (ADR 0010, code in `compiler/apply/`), and `health` and `check` (`compiler/health/`), and `update` (ADR 0011, `compiler/update/`: prepares `@next` and arms its trial boot; `health -boot` promotes or fails the trial; `rollback`) work. The image ships it as `/usr/bin/rollgate`, with `rollgate-boot.service`. Templates are in `compiler/templates/`. |
 | `release/` | The release train (ADR 0012): `publish.sh` adds a release to the published site, `dry-run.sh` rehearses it with a throwaway key, and `bump.sh` makes the weekly date bump (`.github/workflows/bump.yml`). `.github/workflows/release.yml` runs it after CI passes on `main`; `compiler/cmd/rollgate-release` maintains `releases.json`. |
-| `packaging/` *(planned)* | PKGBUILDs for our own packages (e.g. `rollgate` itself). |
+| `packaging/` | `rollgate/PKGBUILD`: the rollgate package (CLI, its units, the health checks). `build.sh` builds it with makepkg; the image installs it, and releases publish it to the signed `[rollgate]` repository (ADR 0012). |
 
 ## Commands
 
@@ -78,6 +78,7 @@ Run `image` and `test-vm` on an Arch host as root (or with sudo); see `docs/dev-
 |---|---|
 | `make check` | L0 + L1: shellcheck, gofmt, go vet, staticcheck, Go tests, `rollgate validate` on the example config, and the release dry run (`make release-dry-run`). Run before every commit. |
 | `make rollgate` | Builds the static `rollgate` CLI into `build/rollgate`. |
+| `make package` | Builds the rollgate package for `image/snapshot-date` into `build/pkg/` (needs fakeroot). |
 | `make rollgate-release` | Builds `build/rollgate-release`, which adds, withdraws and verifies releases in `releases.json`. CI and maintainers only. |
 | `make golden-update` | Rewrites `tests/golden/*/expected/` from the compiler. Review the diff; never use it just to make a failing test pass. |
 | `make image` | Builds `build/rollgate-<date>.img` at the date in `image/snapshot-date`. |

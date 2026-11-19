@@ -217,13 +217,17 @@ func updateCmd(want string, stdout, stderr io.Writer) int {
 
 // updateSystem is the real router for rollgate update.
 func updateSystem(a apply.System) update.System {
-	url := os.Getenv("ROLLGATE_RELEASES_URL") // for tests; routers use the default
+	url := os.Getenv("ROLLGATE_RELEASES_URL") // for tests; routers use the defaults
+	repo := os.Getenv("ROLLGATE_REPO_URL")
 	if url == "" {
 		url = update.DefaultReleasesURL
 	}
+	if repo == "" {
+		repo = update.DefaultRepoURL
+	}
 	return update.System{Root: a.Root, Run: a.Run, Stream: update.StreamExec, Out: a.Out, Now: a.Now, Sleep: time.Sleep,
 		Get: update.HTTPGet, Verify: update.GPGVerify(filepath.Join(a.Root, update.PacmanGnupg)),
-		URL: url, Free: update.FreeBytes}
+		URL: url, Repo: repo, Free: update.FreeBytes}
 }
 
 // healthCmd runs the health checks: exit 0 if all pass, 1 if any fails.

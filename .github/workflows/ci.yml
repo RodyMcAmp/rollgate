@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Install check tools
-        run: pacman -Syu --noconfirm --needed make shellcheck go staticcheck
+        run: pacman -Syu --noconfirm --needed make shellcheck go staticcheck fakeroot
       - run: make check
 
   netns:
@@ -49,7 +49,7 @@ jobs:
           pacman-key --populate archlinux
           pacman -Syu --noconfirm --needed make arch-install-scripts btrfs-progs \
             dosfstools gptfdisk grub qemu-system-x86 edk2-ovmf openssh go \
-            iproute2 iputils dnsmasq
+            iproute2 iputils dnsmasq fakeroot
       # The pinned snapshot's packages never change, so keep them between runs
       # instead of downloading ~625 MB from archive.archlinux.org every time.
       # pacman still checks every package's signature when installing.
@@ -93,7 +93,7 @@ jobs:
           pacman-key --init
           pacman-key --populate archlinux
           pacman -Syu --noconfirm --needed make arch-install-scripts btrfs-progs \
-            dosfstools gptfdisk grub qemu-system-x86 edk2-ovmf openssh go
+            dosfstools gptfdisk grub qemu-system-x86 edk2-ovmf openssh go fakeroot
       # The previous release's packages, cached like the image job's. The update
       # itself downloads the week's changes (~400 MB) inside the VM, as a router would.
       - name: Restore package cache

@@ -275,6 +275,33 @@ func TestPrepareFailedUpdate(t *testing.T) {
 	}
 }
 
+// TestPrepareMovesRepo: an image that uses the [rollgate] repository gets it
+// pinned to the new date in @next, like the archive; @ keeps its own.
+func TestPrepareMovesRepo(t *testing.T) {
+	f := newFake(t)
+	old := "Server = https://rodymcamp.github.io/rollgate/repo/2026-11-16/$arch\n"
+	f.write(filepath.Join(topMount, "@", RepoMirrorlistPath), old)
+	s := f.system()
+	s.Repo = "http://10.0.2.2:8088/"
+	if err := Prepare(s, ""); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.read(filepath.Join(topMount, "@next", RepoMirrorlistPath)); !strings.Contains(got, "\nServer = http://10.0.2.2:8088/repo/2026-11-23/$arch\n") {
+		t.Errorf("@next's rollgate-mirrorlist:\n%s", got)
+	}
+	if f.read(filepath.Join(topMount, "@", RepoMirrorlistPath)) != old {
+		t.Error("the running system's rollgate-mirrorlist changed")
+	}
+	// Without the file (no release key in the image), none is created.
+	f = newFake(t)
+	if err := Prepare(f.system(), ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(f.root, topMount, "@next", RepoMirrorlistPath)); err == nil {
+		t.Error("rollgate-mirrorlist created in an image that doesn't use the repository")
+	}
+}
+
 // TestPrepareRetriesDownload: a stalled download is retried; three failures
 // end the update before anything is installed.
 func TestPrepareRetriesDownload(t *testing.T) {

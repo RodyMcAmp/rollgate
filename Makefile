@@ -14,16 +14,16 @@ SUDO := $(if $(filter 0,$(shell id -u)),,sudo)
 SHELL_SCRIPTS := image/build.sh tests/vm/boot-test.sh tests/vm/rollback-test.sh \
 	tests/vm/apply-test.sh tests/vm/ipv6-test.sh tests/vm/trial-test.sh \
 	tests/vm/update-test.sh tests/netns/run.sh release/publish.sh release/dry-run.sh \
-	release/bump.sh \
+	release/bump.sh packaging/build.sh \
 	image/rootfs/usr/local/sbin/rollgate-snapshot-rollback \
 	image/rootfs/usr/local/lib/rollgate/boot-report
 
-.PHONY: check golden-update rollgate rollgate-release release-dry-run test-netns image \
-	image-previous test-vm test-apply test-ipv6 test-trial test-rollback test-update clean
+.PHONY: check golden-update rollgate rollgate-release release-dry-run package test-netns \
+	image image-previous test-vm test-apply test-ipv6 test-trial test-rollback test-update clean
 
 ## L0 + L1: shell lint, Go format/vet/lint/tests, and the example config validates.
 ## Run before every commit.
-check: rollgate-release
+check: rollgate rollgate-release
 	shellcheck $(SHELL_SCRIPTS)
 	@unformatted=$$(cd compiler && gofmt -l .); \
 	  if [ -n "$$unformatted" ]; then echo "gofmt needed: $$unformatted"; exit 1; fi
@@ -43,8 +43,12 @@ rollgate-release:
 	cd compiler && CGO_ENABLED=0 go build -trimpath -o ../$(BUILD_DIR)/rollgate-release ./cmd/rollgate-release
 
 ## Rehearse publishing a release with a throwaway key (also part of check).
-release-dry-run: rollgate-release
+release-dry-run: rollgate rollgate-release
 	bash release/dry-run.sh
+
+## Build the rollgate package (packaging/rollgate) for image/snapshot-date into build/pkg.
+package: rollgate
+	bash packaging/build.sh $(SNAPSHOT_DATE) $(BUILD_DIR)/rollgate $(BUILD_DIR)/pkg
 
 ## Build the rollgate CLI as a static binary (ADR 0005).
 rollgate:
@@ -69,7 +73,7 @@ image-previous: rollgate
 ## a trial that fails its checks and one that panics both roll back by themselves; one
 ## that passes becomes the system, with the config intact and both kernels booting.
 ## Needs make image-previous and internet access (the Arch Linux Archive).
-test-update:
+test-update: rollgate rollgate-release
 	$(SUDO) LOG_DIR=$(BUILD_DIR)/test-logs bash tests/vm/update-test.sh $(PREVIOUS_IMAGE) $(SNAPSHOT_DATE)
 
 ## L3: boot the image in QEMU with both kernels.

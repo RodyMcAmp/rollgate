@@ -130,11 +130,15 @@ Developer setup (WSL2 or native Arch) is in [dev-setup.md](dev-setup.md).
 
 ## Our own packages
 
-The only non-Arch package on the router is `rollgate` itself (the Go binary, templates, systemd units and health checks), plus anything an ADR approves later.
+The only non-Arch package on the router is `rollgate` itself (the Go binary, `rollgate-boot.service`, `rollgate-health.service` and the health checks), plus anything an ADR approves later.
 
-- PKGBUILDs live in `packaging/<name>/PKGBUILD`.
-- CI builds them in a clean chroot, signs them with the project key, and publishes them to the `rollgate` pacman repository.
-- `pacman.conf` on the router lists `[rollgate]` after `core` and `extra`, with `SigLevel = Required`.
+- PKGBUILDs live in `packaging/<name>/PKGBUILD`. `packaging/build.sh` builds the rollgate package with makepkg from the static binary `make rollgate` produced (as the user `nobody` when run as root, because makepkg refuses root).
+- The package version is the release date with dots (`2026.11.16-1`), so every release upgrades it.
+- **The image always installs rollgate as this package** (`image/build.sh`), never as loose files, so a later release can upgrade it.
+- **The `[rollgate]` repository has one directory per release:** `repo/<date>/x86_64/` on GitHub Pages, with the package and the repository database, both signed by the release key. It's pinned like the Arch Linux Archive, so a router on a given date gets exactly the rollgate built for that date. ADR 0012 shows a single `repo/x86_64/`; the dated directories keep the pinning principle (ADR 0002).
+- The release workflow publishes each release's directory before it lists the date in `releases.json` (`release/publish.sh`). A published directory never changes.
+- **Once the image carries the release key**, `image/build.sh` lists `[rollgate]` in the router's `pacman.conf` after `core` and `extra`, with `SigLevel = Required`. Its server is in `/etc/pacman.d/rollgate-mirrorlist`, which `rollgate update` moves to the new date along with the archive mirrorlist. Without the key there's no `[rollgate]` section: updates can't run then anyway.
+- The L4 test (`make test-update`) publishes two releases with `release/publish.sh` and a throwaway key. The router then upgrades its own rollgate package from that repository during the update.
 
 ## Package holds
 

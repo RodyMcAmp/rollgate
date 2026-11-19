@@ -20,6 +20,10 @@ import (
 // its detached signature, releases.json.sig (ADR 0012).
 const DefaultReleasesURL = "https://rodymcamp.github.io/rollgate/releases.json"
 
+// DefaultRepoURL is the base of the [rollgate] pacman repository: each release's
+// packages are under repo/DATE/x86_64 (ADR 0012).
+const DefaultRepoURL = "https://rodymcamp.github.io/rollgate"
+
 // Release statuses in releases.json.
 const (
 	Current   = "current"
@@ -120,6 +124,10 @@ func validDate(s string) bool {
 // Arch Linux Archive date the router installs from (ADR 0002), so it is also
 // where the running release is read from.
 const MirrorlistPath = "etc/pacman.d/mirrorlist"
+
+// RepoMirrorlistPath names the [rollgate] repository's server, relative to the root.
+// The image writes it once the release key exists (ADR 0012).
+const RepoMirrorlistPath = "etc/pacman.d/rollgate-mirrorlist"
 
 var archiveServer = regexp.MustCompile(`^\s*Server\s*=\s*https://archive\.archlinux\.org/repos/(\d{4})/(\d{2})/(\d{2})/`)
 

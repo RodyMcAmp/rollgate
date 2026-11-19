@@ -95,6 +95,7 @@ type System struct {
 	Get    Get
 	Verify Verify
 	URL    string                            // releases.json
+	Repo   string                            // the [rollgate] repository's base URL (ADR 0012)
 	Free   func(path string) (uint64, error) // bytes available to root
 }
 
@@ -115,7 +116,7 @@ func FreeBytes(path string) (uint64, error) {
 	return st.Bavail * uint64(st.Bsize), nil
 }
 
-var tmpl = template.Must(template.New("").Option("missingkey=error").ParseFS(templates.FS, "grub-custom.tmpl", "mirrorlist.tmpl"))
+var tmpl = template.Must(template.New("").Option("missingkey=error").ParseFS(templates.FS, "grub-custom.tmpl", "mirrorlist.tmpl", "rollgate-mirrorlist.tmpl"))
 
 func render(name string, data any) ([]byte, error) {
 	var b bytes.Buffer
@@ -239,6 +240,17 @@ func updateNext(s System, next, date string, m mount, options []string) error {
 	}
 	if err := writeAtomic(filepath.Join(next, MirrorlistPath), mirrorlist, true); err != nil {
 		return err
+	}
+	// The [rollgate] repository, when the image uses it (it does once the
+	// release key exists), moves to the same date.
+	if _, err := os.Stat(filepath.Join(next, RepoMirrorlistPath)); err == nil {
+		list, err := render("rollgate-mirrorlist.tmpl", map[string]string{"Date": date, "URL": strings.TrimSuffix(s.Repo, "/")})
+		if err != nil {
+			return err
+		}
+		if err := writeAtomic(filepath.Join(next, RepoMirrorlistPath), list, true); err != nil {
+			return err
+		}
 	}
 	if err := pacmanUpgrade(s, m); err != nil {
 		return err

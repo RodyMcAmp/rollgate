@@ -3,14 +3,17 @@
 # config, and update to the candidate release, as a router in the field would.
 #
 #   1. Boot the previous release's image and apply tests/vm/apply/good.toml (renamed
-#      ports, a VLAN, firewall, dnsmasq, Unbound). releases.json, signed by a throwaway
-#      key that only this VM trusts, lists the previous release and the candidate.
+#      ports, a VLAN, firewall, dnsmasq, Unbound). The host serves what the release
+#      train publishes, made by release/publish.sh with a throwaway key that only this
+#      VM trusts: releases.json listing the previous release and the candidate, and
+#      each release's signed [rollgate] package repository, which the VM uses.
 #   2. A trial whose health check fails rolls back by itself; the config still runs.
 #   3. A trial whose kernel panics rolls back by itself (panic=10, or the watchdog).
 #   4. rollgate update to the candidate: pacman -Syu in @next downloads the week's
 #      updates (both kernels among them) and rebuilds both initramfs images. The trial
 #      passes and becomes the system. After a reboot the candidate runs with its new
-#      kernel and the same config, and its linux-lts entry boots too.
+#      kernel, the candidate's rollgate package from the [rollgate] repository, and the
+#      same config, and its linux-lts entry boots too.
 #
 # Steps 2 and 3 install the previous release again (a date listed in releases.json),
 # which downloads almost nothing; only step 4 downloads the update. The checks for
@@ -19,8 +22,10 @@
 #
 # Usage:  sudo tests/vm/update-test.sh build/rollgate-<previous>.img <candidate-date>
 # Env:    LOG_DIR, OVMF_CODE, OVMF_VARS as in boot-test.sh; SSH_PORT (default 2228)
-#         ROLLGATE   a rollgate binary to test instead of the image's (for development)
-# Needs internet access (the Arch Linux Archive), gpg and go.
+#         ROLLGATE   a rollgate binary to test instead of the image's (for development); the
+#                    published packages carry it too (default: build/rollgate)
+#         ROLLGATE_RELEASE  the release tool (default: build/rollgate-release)
+# Needs internet access (the Arch Linux Archive), gpg, go, makepkg and fakeroot.
 
 # Commands run inside the VM are single-quoted on purpose, so they expand there.
 # shellcheck disable=SC2016
@@ -30,6 +35,10 @@ image=${1:?usage: update-test.sh <previous-image> <candidate-date>}
 candidate=${2:?usage: update-test.sh <previous-image> <candidate-date>}
 image=$(realpath "$image")
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# The rollgate the published packages carry, and the release tool (make test-update
+# builds both).
+binary=$(realpath -m "${ROLLGATE:-$here/../../build/rollgate}")
+release_tool=$(realpath -m "${ROLLGATE_RELEASE:-$here/../../build/rollgate-release}")
 log_dir=$(realpath -m "${LOG_DIR:-$(dirname "$image")/test-logs}")
 ovmf_code=${OVMF_CODE:-/usr/share/edk2/x64/OVMF_CODE.4m.fd}
 ovmf_vars=${OVMF_VARS:-/usr/share/edk2/x64/OVMF_VARS.4m.fd}
@@ -54,9 +63,11 @@ log() { echo "==> $*"; }
 [[ $previous =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || die "can't read the release date from the image name $image"
 [[ $candidate > $previous ]] || die "the candidate ($candidate) must be newer than the previous release ($previous)"
 for f in "$ovmf_code" "$ovmf_vars"; do [[ -f $f ]] || die "missing UEFI firmware $f (install edk2-ovmf)"; done
-for tool in qemu-system-x86_64 ssh ssh-keygen gpg go; do
+for tool in qemu-system-x86_64 ssh ssh-keygen gpg go makepkg fakeroot repo-add; do
   command -v "$tool" >/dev/null || die "missing '$tool' (see docs/dev-setup.md)"
 done
+[[ -x $binary ]] || die "no rollgate at $binary (run: make rollgate)"
+[[ -x $release_tool ]] || die "no rollgate-release at $release_tool (run: make rollgate-release)"
 
 if [[ -w /dev/kvm ]]; then
   accel=(-accel kvm -cpu host); timeout_s=420 # boot waits for the health checks, up to 300 s
@@ -133,7 +144,7 @@ release() { vm 'rollgate status' 2>/dev/null | sed -n 's/^Release: \(.*\)\.$/\1/
 # update <date>: runs rollgate update; it reboots at the end, ending the SSH session.
 update() {
   local out
-  out=$(vm "ROLLGATE_RELEASES_URL=$url rollgate update $1" 2>&1) || true
+  out=$(vm "ROLLGATE_RELEASES_URL=$url ROLLGATE_REPO_URL=$repo_url rollgate update $1" 2>&1) || true
   echo "$out" | sed -n '/Preparing the update/p; /is ready/p' | sed 's/^/    /'
   grep -q "is ready" <<<"$out" || die "rollgate update $1 didn't arm a trial:
 $out"
@@ -149,15 +160,17 @@ failed_trial() {
   check_config
 }
 
-log "signing releases.json ($previous previous, $candidate current) with a throwaway key"
+log "publishing $previous and $candidate with a throwaway key (release/publish.sh)"
 gpg_test() { gpg --homedir "$work/gnupg" --batch --pinentry-mode loopback --passphrase '' "$@"; }
 install -d -m 0700 "$work/gnupg"
 gpg_test --quick-generate-key "rollgate update test <test@invalid>" ed25519 sign never 2>/dev/null
 fpr=$(gpg_test --with-colons --list-secret-keys | awk -F: '$1 == "fpr" { print $10; exit }')
-printf '{"releases": [{"date": "%s", "status": "previous"}, {"date": "%s", "status": "current"}]}\n' \
-  "$previous" "$candidate" > "$work/www/releases.json"
-gpg_test --detach-sign --output "$work/www/releases.json.sig" "$work/www/releases.json"
 gpg_test --armor --export "$fpr" > "$work/release-key.asc"
+for d in "$previous" "$candidate"; do
+  pkg=$(bash "$here/../../packaging/build.sh" "$d" "$binary" "$work/pkg")
+  GNUPGHOME=$work/gnupg RELEASE_KEY=$fpr ROLLGATE_RELEASE=$release_tool \
+    bash "$here/../../release/publish.sh" "$work/www" "$d" "$pkg" >/dev/null
+done
 
 log "preparing a copy of the $previous image"
 cp --sparse=always "$image" "$work/disk.img"
@@ -172,10 +185,22 @@ install -m 0644 "$here/apply/good.toml" "$work/root/etc/rollgate/router.toml"
 # (gpg-agent, keyboxd) that would keep the mounted image busy.
 cp -a "$work/root/etc/pacman.d/gnupg" "$work/keyring"
 gpg --homedir "$work/keyring" --batch --quiet --import "$work/release-key.asc"
+# Signed locally, as image/build.sh does with the real key, so pacman trusts it for
+# the [rollgate] repository.
+pacman-key --gpgdir "$work/keyring" --lsign-key "$fpr" >/dev/null 2>&1
 gpgconf --homedir "$work/keyring" --kill all 2>/dev/null || true
 cp -a "$work/keyring/." "$work/root/etc/pacman.d/gnupg/"
 find "$work/root/etc/pacman.d/gnupg" -type s -delete
 echo "$fpr" >> "$work/root/usr/lib/rollgate/release-keys"
+# The [rollgate] repository as image/build.sh writes it with a release key, but served
+# by the host (rollgate update moves it with ROLLGATE_REPO_URL).
+cat >> "$work/root/etc/pacman.conf" <<'EOF'
+
+[rollgate]
+SigLevel = Required
+Include = /etc/pacman.d/rollgate-mirrorlist
+EOF
+echo "Server = http://10.0.2.2:$http_port/repo/$previous/\$arch" > "$work/root/etc/pacman.d/rollgate-mirrorlist"
 # Test-only failures, on a trial boot only (/var/lib/rollgate is shared by every root,
 # so the test sets the flags from @): a health check that fails, and a unit that
 # crashes the kernel.
@@ -216,6 +241,7 @@ go build -o "$work/serve" "$here/serve.go"
 "$work/serve" -addr "127.0.0.1:$http_port" -dir "$work/www" &
 server_pid=$!
 url="http://10.0.2.2:$http_port/releases.json"
+repo_url="http://10.0.2.2:$http_port"
 
 : > "$serial"
 : > "$report"
@@ -245,7 +271,8 @@ uuid_cmd='btrfs subvolume show / | awk "\$1 == \"UUID:\" { print \$2; exit }"'
 uuid_a=$(vm "$uuid_cmd" | tr -d '\r')
 kernel_a=$(vm 'uname -r' | tr -d '\r')
 packages_a=$(vm 'pacman -Q | md5sum' | tr -d '\r')
-echo "    release $previous (kernel $kernel_a), config applied and confirmed, health checks pass"
+expect "the image's rollgate package" "^rollgate ${previous//-/.}-1$" 'pacman -Q rollgate'
+echo "    release $previous (kernel $kernel_a, rollgate ${previous//-/.}-1), config applied and confirmed, health checks pass"
 
 log "2. a trial that fails a health check rolls back by itself"
 vm 'touch /var/lib/rollgate/fail-trial'
@@ -279,7 +306,8 @@ expect "the new default kernel" "^ok$" '[ "$(uname -r | tr - .)" = "$(pacman -Q 
 expect "the original system is @previous" "uuid $uuid_a path @previous$" 'btrfs subvolume list -u /'
 expect "status after" "Last update: to $candidate, .*The previous system \($previous\) is kept" 'rollgate status'
 check_config
-echo "    $candidate runs with its new kernel ($(vm 'uname -r' | tr -d '\r')) and the same config"
+expect "rollgate from the [rollgate] repository" "^rollgate ${candidate//-/.}-1$" 'pacman -Q rollgate'
+echo "    $candidate runs with its new kernel ($(vm 'uname -r' | tr -d '')), rollgate ${candidate//-/.}-1 and the same config"
 vm "grub-editenv /efi/grub/grubenv set 'next_entry=rollgate Linux, with Linux linux-lts'"
 reboot_and_wait "the linux-lts boot of $candidate"
 expect "the new linux-lts" "^ok$" '[ "$(uname -r | sed "s/-lts$//" | tr - .)" = "$(pacman -Q linux-lts | cut -d" " -f2 | tr - .)" ] && echo ok'
