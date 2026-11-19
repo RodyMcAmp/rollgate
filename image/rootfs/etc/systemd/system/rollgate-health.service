@@ -12,6 +12,9 @@ After=network.target systemd-networkd.service nftables.service sshd.service unbo
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=/usr/bin/rollgate health -boot -wait 300
+# Also on the console, so whoever looks at the screen (or a test's serial log) sees
+# which check failed.
+StandardOutput=journal+console
 
 [Install]
 WantedBy=multi-user.target
