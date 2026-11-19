@@ -13,7 +13,7 @@
 #
 # Output: OUTDIR/rollgate-<date>/ with rollgate.vmx and rollgate.vmdk.
 #
-# The VM: UEFI (Secure Boot off), 2 CPUs, 2 GB, the disk on NVMe, and two vmxnet3
+# The VM: UEFI (Secure Boot off), 2 CPUs, 2 GB, a 32 GB disk on NVMe, and two vmxnet3
 # network adapters with fixed MAC addresses, so the config can name them:
 #   wan  00:50:56:3a:00:01  VMware's NAT network, VMnet8 (the VM's "internet")
 #   lan  00:50:56:3a:00:02  VMnet2, a host-only network of its own (192.168.50.0/24,
@@ -52,6 +52,11 @@ trap cleanup EXIT
 
 log "copying $image"
 cp --sparse=always "$image" "$work/disk.img"
+# A 32 GB virtual disk: the router grows its root filesystem to fill it on first boot
+# (docs/architecture.md#disk-growth). The .vmdk only stores what's used.
+if (($(stat -c %s "$work/disk.img") < 32 * 1024 ** 3)); then
+  truncate -s 32G "$work/disk.img"
+fi
 
 log "installing your SSH key and the VMware router.toml"
 # The root partition starts after 1 MiB and the 512 MiB ESP (image/build.sh).

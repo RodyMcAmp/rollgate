@@ -281,7 +281,7 @@ grub-mkconfig -o /efi/grub/grub.cfg
 systemctl enable systemd-networkd.service systemd-resolved.service sshd.service \
   nftables.service grub-btrfsd.service snapper-cleanup.timer \
   rollgate-boot-report.service rollgate-boot.service rollgate-health.service \
-  rollgate-softdog.service
+  rollgate-softdog.service rollgate-growfs.service
 # The CLI runs on the target (a static binary needs nothing from it).
 rollgate help >/dev/null
 # Nothing in M1 needs network-online, and unplugged ports would make it time out.
@@ -318,6 +318,7 @@ grep -qa "$esp_uuid" "$mnt/efi/EFI/BOOT/BOOTX64.EFI" || die "GRUB EFI binary doe
 [[ -f $mnt/boot/vmlinuz-linux && -f $mnt/boot/vmlinuz-linux-lts ]] || die "kernels missing from /boot"
 [[ -L $mnt/etc/systemd/system/sysinit.target.wants/rollgate-boot.service ]] || die "rollgate-boot.service not enabled"
 [[ -L $mnt/etc/systemd/system/sysinit.target.wants/rollgate-softdog.service ]] || die "rollgate-softdog.service not enabled"
+[[ -L $mnt/etc/systemd/system/multi-user.target.wants/rollgate-growfs.service && -f $mnt/etc/repart.d/50-rollgate-root.conf ]] || die "disk growth (repart.d, rollgate-growfs.service) not set up"
 grep -qx "RuntimeWatchdogSec=30s" "$mnt/etc/systemd/system.conf.d/10-rollgate-watchdog.conf" || die "systemd watchdog not configured"
 [[ -d $mnt/var/lib/pacman/local/rollgate-${date//-/.}-1 ]] || die "the rollgate package isn't installed"
 [[ -x $mnt/usr/bin/rollgate && -f $mnt/usr/lib/systemd/system/rollgate-health.service ]] || die "the rollgate package's files are missing"

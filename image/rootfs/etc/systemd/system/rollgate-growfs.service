@@ -1,0 +1,18 @@
+# Grows the root Btrfs filesystem to fill its partition, after systemd-repart has grown
+# the partition to fill the disk (/etc/repart.d/50-rollgate-root.conf;
+# docs/architecture.md#disk-growth). Btrfs grows while mounted. Once the filesystem
+# fills the disk this changes nothing. Skipped on a snapshot booted from the GRUB menu,
+# whose root is a temporary overlay.
+[Unit]
+Description=rollgate: grow the root filesystem to fill the disk
+After=systemd-repart.service
+
+[Service]
+Type=oneshot
+ExecCondition=/bin/sh -c 'test "$(findmnt -no FSTYPE /)" = btrfs'
+ExecStart=/usr/bin/btrfs filesystem resize max /
+# Write the new size to disk now, not at the next commit.
+ExecStart=/usr/bin/btrfs filesystem sync /
+
+[Install]
+WantedBy=multi-user.target

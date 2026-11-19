@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # L3 boot test (docs/testing.md): boots the image in QEMU under UEFI with the default
-# kernel (linux) and with the fallback (linux-lts), then once more on a machine with no
-# hardware watchdog, and checks the ROLLGATE_BOOT line each boot reports (on a
-# virtio-serial channel of its own): a clean boot, the right kernel, a watchdog armed.
+# kernel (linux) and with the fallback (linux-lts), then on a machine with no hardware
+# watchdog, then from a disk bigger than the image, and checks the ROLLGATE_BOOT line
+# each boot reports (on a virtio-serial channel of its own): a clean boot, the right
+# kernel, a watchdog armed. After the last boot the root partition and filesystem must
+# fill the bigger disk.
 #
 # Usage:  sudo tests/vm/boot-test.sh build/rollgate-<date>.img
 # Env:    LOG_DIR    where serial logs are kept (default: next to the image, test-logs/)
@@ -26,7 +28,7 @@ log() { echo "==> $*"; }
 [[ $EUID -eq 0 ]] || die "must run as root"
 [[ -f $image ]] || die "no image at $image (run: make image)"
 for f in "$ovmf_code" "$ovmf_vars"; do [[ -f $f ]] || die "missing UEFI firmware $f (install edk2-ovmf)"; done
-for tool in qemu-system-x86_64 grub-editenv; do
+for tool in qemu-system-x86_64 grub-editenv sfdisk losetup btrfs; do
   command -v "$tool" >/dev/null || die "missing '$tool' (see docs/dev-setup.md)"
 done
 
@@ -54,15 +56,35 @@ lts_entry=$(grep -oP "^menuentry '\K[^']*lts(?=')" "$work/esp/grub/grub.cfg" | h
 umount "$work/esp"
 [[ -n $lts_entry ]] || die "no linux-lts menu entry in grub.cfg"
 
+# check_grown <disk> <name>: after a boot on a disk bigger than the image, the root
+# partition reaches the end of the disk and its Btrfs filesystem fills the partition
+# (docs/architecture.md#disk-growth).
+check_grown() {
+  local disk=$1 name=$2 start size last loop fs_bytes
+  read -r start size < <(sfdisk -d "$disk" | sed -n "s|^$disk""2 : start= *\([0-9]*\), size= *\([0-9]*\),.*|\1 \2|p")
+  last=$(sfdisk -d "$disk" | sed -n 's/^last-lba: //p')
+  [[ -n $start && -n $last ]] || die "'$name': can't read the partition table"
+  # Partitions end on a 1 MiB boundary, so up to 2047 sectors may stay free.
+  ((start + size - 1 > last - 2048)) ||
+    die "'$name': the root partition ends at sector $((start + size - 1)), not near the disk's end ($last)"
+  loop=$(losetup -f --show -o $((start * 512)) --sizelimit $((size * 512)) "$disk")
+  fs_bytes=$(btrfs inspect-internal dump-super "$loop" | awk '$1 == "total_bytes" { print $2; exit }')
+  losetup -d "$loop"
+  ((fs_bytes > size * 512 - 1048576)) ||
+    die "'$name': the filesystem is $fs_bytes bytes, the partition $((size * 512))"
+  echo "    grown: root partition and filesystem $((fs_bytes / 1048576)) MiB"
+}
+
 # boot_once <name> <grub-entry, or "" for the default> <expected kernel: default|lts>
-#           <QEMU machine> <expected watchdog= value>
+#           <QEMU machine> <expected watchdog= value> [disk size in MiB: check it grows]
 boot_once() {
-  local name=$1 entry=$2 want=$3 machine=$4 want_watchdog=$5
+  local name=$1 entry=$2 want=$3 machine=$4 want_watchdog=$5 disk_mib=${6:-}
   local disk="$work/$name.img" vars="$work/$name.vars.fd" serial="$log_dir/$name.serial.log"
   local report="$log_dir/$name.report.log"
 
-  log "boot '$name'${entry:+ (entry: $entry)}"
+  log "boot '$name'${entry:+ (entry: $entry)}${disk_mib:+ (disk: $disk_mib MiB)}"
   cp --sparse=always "$image" "$disk"
+  [[ -z $disk_mib ]] || truncate -s "${disk_mib}M" "$disk"
   cp "$ovmf_vars" "$vars"
   : > "$serial"
   : > "$report"
@@ -94,10 +116,11 @@ boot_once() {
   kill "$qemu_pid" 2>/dev/null || true
   wait "$qemu_pid" 2>/dev/null || true
   qemu_pid=
-  rm -f "$disk" "$vars"
 
   [[ -n $line ]] || die "'$name': no ROLLGATE_BOOT line within ${timeout_s}s (serial log: $serial)"
   echo "    $line"
+  [[ -z $disk_mib ]] || check_grown "$disk" "$name"
+  rm -f "$disk" "$vars"
 
   local state kernel watchdog failed
   state=$(sed -n 's/.*state=\([^ ]*\).*/\1/p' <<<"$line")
@@ -118,5 +141,7 @@ boot_once() {
 boot_once default "" default q35 iTCO_wdt:active
 boot_once lts "$lts_entry" lts q35 iTCO_wdt:active
 boot_once no-hw-watchdog "" default pc Software_Watchdog:active
+# Written to a disk bigger than the image, the root partition and filesystem fill it.
+boot_once bigger-disk "" default q35 iTCO_wdt:active 12288
 
-log "PASS: both kernels boot cleanly, with a watchdog armed (logs: $log_dir)"
+log "PASS: both kernels boot cleanly, with a watchdog armed, and the root grows to fill the disk (logs: $log_dir)"
