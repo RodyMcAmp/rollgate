@@ -38,6 +38,22 @@ Pinning the date gives you:
 4. **Withdrawing**: if a release causes problems in the field, mark it `withdrawn` in `releases.json`.
    `rollgate update` skips withdrawn dates.
 
+### `releases.json`
+
+Published with a detached signature, `releases.json.sig` (ADR 0012):
+
+```json
+{"releases": [
+  {"date": "2026-11-09", "status": "previous"},
+  {"date": "2026-11-16", "status": "current"}
+]}
+```
+
+- Each date is listed once. `status` is `current`, `previous` or `withdrawn`; no other fields are allowed.
+- `rollgate update` with no date picks the newest `current` date. A date given by hand must be listed and not `withdrawn`. Dates older than the running one are refused (going back is `rollgate rollback`).
+- The router's running release is the Arch Linux Archive date in `/etc/pacman.d/mirrorlist`.
+- Before reading the file, `rollgate update` checks the signature with gpg against pacman's keyring, `/etc/pacman.d/gnupg`. The signature must be good, from a key that hasn't expired or been revoked, and from a key listed in `/usr/lib/rollgate/release-keys` (full fingerprints, one per line). pacman's keyring also trusts every Arch packager, so a good signature alone isn't enough. With no key listed, `rollgate update` refuses to run.
+
 **Security fixes** that can't wait for the weekly bump get an out-of-cycle date bump through the same pipeline. The gate is never skipped.
 
 ## Image build
