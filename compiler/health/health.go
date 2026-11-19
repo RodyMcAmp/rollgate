@@ -119,3 +119,31 @@ func Wait(dir string, limit, interval, total time.Duration, now func() time.Time
 		sleep(interval)
 	}
 }
+
+// Diagnose writes, for each failed check that has them, the details behind
+// the one-line result, so a failure at boot explains itself in the journal and
+// on the console. run runs a program and returns its output.
+func Diagnose(w io.Writer, results []Result, run func(name string, args ...string) ([]byte, error)) {
+	for _, r := range results {
+		if r.OK || r.Name != "20-wan" {
+			continue
+		}
+		// What networkd thinks of each port, and its recent log lines: whether
+		// it is still waiting for the port, asking for a lease, or got none.
+		for _, args := range [][]string{
+			{"--no-pager", "list"},
+			{"--no-pager", "--lines=30", "status"},
+		} {
+			fmt.Fprintf(w, "%s: networkctl %s\n", r.Name, strings.Join(args[1:], " "))
+			out, err := run("networkctl", args...)
+			if text := strings.TrimRight(string(out), "\n"); text != "" {
+				for _, line := range strings.Split(text, "\n") {
+					fmt.Fprintf(w, "  | %s\n", line)
+				}
+			}
+			if err != nil {
+				fmt.Fprintf(w, "  | (%v)\n", err)
+			}
+		}
+	}
+}

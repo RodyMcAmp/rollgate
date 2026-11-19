@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strconv"
@@ -266,6 +267,11 @@ func healthCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	health.Print(stdout, results)
 	if !health.AllOK(results) {
+		if *boot {
+			health.Diagnose(stdout, results, func(name string, args ...string) ([]byte, error) {
+				return exec.Command(name, args...).CombinedOutput()
+			})
+		}
 		return 1
 	}
 	return 0

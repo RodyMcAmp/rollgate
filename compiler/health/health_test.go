@@ -246,3 +246,25 @@ func TestLookupA(t *testing.T) {
 		t.Error("a truncated reply should be rejected")
 	}
 }
+
+func TestDiagnose(t *testing.T) {
+	var ran []string
+	run := func(name string, args ...string) ([]byte, error) {
+		ran = append(ran, name+" "+strings.Join(args, " "))
+		if args[len(args)-1] == "status" {
+			return nil, errors.New("exit status 1")
+		}
+		return []byte("IDX LINK TYPE  OPERATIONAL SETUP\n  3 wan  ether routable    configuring\n"), nil
+	}
+	var out strings.Builder
+	Diagnose(&out, []Result{{Name: "10-firewall", OK: true}, {Name: "30-dns", Detail: "no answer"}}, run)
+	if out.Len() != 0 || len(ran) != 0 {
+		t.Errorf("no failed WAN check, but it ran %q and wrote:\n%s", ran, out.String())
+	}
+	Diagnose(&out, []Result{{Name: "20-wan", Detail: "wan (wan) has no IPv4 address"}}, run)
+	for _, want := range []string{"20-wan: networkctl list\n", "  |   3 wan  ether routable    configuring\n", "20-wan: networkctl --lines=30 status\n", "  | (exit status 1)\n"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("missing %q in:\n%s", want, out.String())
+		}
+	}
+}

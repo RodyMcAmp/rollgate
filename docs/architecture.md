@@ -128,6 +128,7 @@ M1 ships a simpler interim mechanism: snap-pac pre/post snapshots, with rollback
 
 Each check is a small executable in `/usr/lib/rollgate/health.d/` that exits with status 0 to pass and prints one line saying what it saw.
 `rollgate health` runs them all; `rollgate-health.service` runs it at every boot and waits up to 5 minutes for all of them to pass. With `-boot` it also promotes or fails an update's trial boot, as in the update flow above.
+Its results go to the journal and the console. When `20-wan` fails at boot, it also prints `networkctl list` and `networkctl status` (each port's state and networkd's recent log lines), so the reason, such as a DHCP lease that never came, is on record.
 The checks rollgate ships are one-line scripts calling `rollgate check <name>`, so their logic is in Go and tested (`compiler/health`). Before the first apply, the checks that need a config are skipped or relaxed.
 
 | Script | Passes when |
