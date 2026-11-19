@@ -108,6 +108,17 @@ The web UI (M6) changes nothing itself. It asks `rollgate api`, which runs as ro
 - **The certificate:** the first time, it also makes the web UI's HTTPS certificate and key (`web.crt`, `web.key`, ECDSA P-256, self-signed, valid 10 years). The certificate covers the router's host name and the static addresses of its management zones from the running config.
 - **The fingerprint:** it prints the certificate's SHA-256 fingerprint, and `rollgate status` shows it again, so the user can check that the browser's warning is about their own router. Changing the password later keeps the certificate, so the fingerprint stays the same.
 - **Snapshots:** the secrets are part of `@`, so a system rollback brings back the password that system had.
+- **Turning it on:** it enables `rollgate-api.socket` and `rollgate-web.socket`, which turns the web UI on, and restarts the web server if it runs, so every old session ends.
+
+### The web server (`rollgate web`, ADR 0014)
+
+- **Ports:** `rollgate-web.socket` opens 443 (HTTPS) and 80 (HTTP, which only redirects to HTTPS). systemd starts `rollgate-web.service` on the first visit.
+- **Who can reach it:** like SSH, it listens on every address, and the firewall decides. The generated ruleset accepts 22, 80 and 443 only from `management.allowed_zones`, so WAN can never reach it (hard rule 5).
+- **No privileges:** it runs as a throwaway user (`DynamicUser=`) with no capabilities, a read-only system and systemd's other sandbox settings. The certificate, key and password hash reach it as systemd credentials. The only extra right it has is membership of `rollgate-api`, to ask the API.
+- **Logging in:** one password, checked against the stored hash. Five wrong passwords from one address block that address for 15 minutes. A session is a random token in a cookie (`Secure`, `HttpOnly`, `SameSite=Strict`) that ends after 30 idle minutes, at logout, or when the password changes.
+- **Forms:** every form that changes something carries the session's CSRF token.
+- **Pages** come from the binary itself (`embed`), with a Content Security Policy that allows nothing from outside the router, and no JavaScript.
+- **What it shows so far:** a status page, with the health checks and `rollgate status` from the API. Changing settings in the browser comes next *(planned)*.
 
 ## Updates and rollback
 

@@ -93,6 +93,8 @@ rollgate status        the config generation, the release, and the last update
 
 ## Things to try
 
+- **The web UI** (from a release that has it): run `rollgate web-password` on the router and pick a password of at least 10 characters. Then open `https://192.168.50.2/` in your browser on the PC.
+  The browser warns about the certificate, because the router made it itself. Compare the fingerprint the browser shows (click the warning, then the certificate details) with the one `rollgate web-password` printed, then accept it.
 - **Lock yourself out on purpose:** in `/etc/rollgate/router.toml`, change lan's `ipv4` to `"192.168.50.3/24"` and run `rollgate apply` over SSH. Your session stops working, because the router left 192.168.50.2. Don't confirm: 2 minutes later the old config comes back by itself, and `ssh root@192.168.50.2` works again.
 - **A LAN client:** give another VM a network adapter on VMnet2. It gets an address from the router (192.168.50.100–199) and reaches the internet through it.
 - **Updates:** `rollgate update` installs the newest release once there is one newer than the VM's, with a trial boot and automatic rollback (ADR 0011).

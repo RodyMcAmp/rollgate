@@ -67,8 +67,9 @@ health (docs/architecture.md#health-checks):
 
 web UI (ADR 0014):
   web-password [--stdin]   set the web UI's admin password (asked twice, or one
-                           line from stdin), and make its HTTPS certificate if
-                           there is none; prints the certificate's fingerprint
+                           line from stdin), make its HTTPS certificate if there
+                           is none (prints its fingerprint), and turn the web UI on
+  web                      the web UI's server (rollgate-web.service runs it)
   api [-listen PATH]       serve the local API the web UI uses, on the socket
                            rollgate-api.socket passes (or a new one at PATH)
 `
@@ -182,6 +183,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return apiCmd(args[1:], stderr)
 	case "web-password":
 		return webPasswordCmd(args[1:], stdout, stderr)
+	case "web":
+		return webCmd(args[1:], stderr)
 	case "check":
 		if len(args) != 2 || health.Checks[args[1]] == nil {
 			fmt.Fprint(stderr, usage)

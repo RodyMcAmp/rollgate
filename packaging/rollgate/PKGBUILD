@@ -19,7 +19,8 @@ package() {
   install -Dm0755 "$startdir/rollgate" "$pkgdir/usr/bin/rollgate"
   install -Dm0644 -t "$pkgdir/usr/lib/systemd/system" \
     "$startdir/rollgate-boot.service" "$startdir/rollgate-health.service" \
-    "$startdir/rollgate-api.socket" "$startdir/rollgate-api.service"
+    "$startdir/rollgate-api.socket" "$startdir/rollgate-api.service" \
+    "$startdir/rollgate-web.socket" "$startdir/rollgate-web.service"
   install -Dm0644 "$startdir/sysusers.conf" "$pkgdir/usr/lib/sysusers.d/rollgate.conf"
   install -Dm0755 -t "$pkgdir/usr/lib/rollgate/health.d" "$startdir"/health.d/*
   # ADR 0013: systemd-timesyncd keeps the clock right, on routers that update too.

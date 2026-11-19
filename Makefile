@@ -14,12 +14,12 @@ SUDO := $(if $(filter 0,$(shell id -u)),,sudo)
 SHELL_SCRIPTS := image/build.sh tests/vm/boot-test.sh tests/vm/rollback-test.sh \
 	tests/vm/apply-test.sh tests/vm/ipv6-test.sh tests/vm/trial-test.sh \
 	tests/vm/update-test.sh tests/netns/run.sh release/publish.sh release/dry-run.sh \
-	release/bump.sh packaging/build.sh image/vmware.sh tests/vm/vmware-test.sh tests/vm/api-test.sh \
+	release/bump.sh packaging/build.sh image/vmware.sh tests/vm/vmware-test.sh tests/vm/api-test.sh tests/vm/web-test.sh \
 	image/rootfs/usr/local/sbin/rollgate-snapshot-rollback \
 	image/rootfs/usr/local/lib/rollgate/boot-report
 
 .PHONY: check golden-update rollgate rollgate-release release-dry-run package test-netns \
-	image image-previous vmware test-vmware test-api test-vm test-apply test-ipv6 test-trial test-rollback test-update clean
+	image image-previous vmware test-vmware test-api test-web test-vm test-apply test-ipv6 test-trial test-rollback test-update clean
 
 ## L0 + L1: shell lint, Go format/vet/lint/tests, and the example config validates.
 ## Run before every commit.
@@ -111,6 +111,12 @@ test-vmware:
 ## confirm from the applying connection is refused.
 test-api:
 	$(SUDO) LOG_DIR=$(BUILD_DIR)/test-logs bash tests/vm/api-test.sh $(IMAGE)
+
+## L3: the web UI (ADR 0014) in a VM, as a browser sees it: off until a password is
+## set, TLS with the printed fingerprint, login and session cookie, the status
+## page, HTTP redirects, unreachable from WAN, and a new password ends sessions.
+test-web:
+	$(SUDO) LOG_DIR=$(BUILD_DIR)/test-logs bash tests/vm/web-test.sh $(IMAGE)
 
 ## L3: rollback rehearsal following docs/runbooks/recovery.md.
 test-rollback:

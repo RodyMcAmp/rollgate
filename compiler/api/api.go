@@ -15,9 +15,7 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"os"
 	"regexp"
-	"strconv"
 	"sync"
 	"syscall"
 )
@@ -183,10 +181,9 @@ func Listener(path string) (net.Listener, error) {
 	if path != "" {
 		return net.Listen("unix", path)
 	}
-	if os.Getenv("LISTEN_PID") != strconv.Itoa(os.Getpid()) || os.Getenv("LISTEN_FDS") != "1" {
+	ls, err := SystemdListeners()
+	if err != nil || len(ls) != 1 {
 		return nil, errors.New("no socket from systemd (start rollgate-api.socket, or pass -listen PATH)")
 	}
-	f := os.NewFile(3, "rollgate-api.socket") // SD_LISTEN_FDS_START
-	defer f.Close()
-	return net.FileListener(f)
+	return ls[0], nil
 }

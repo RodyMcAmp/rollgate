@@ -75,6 +75,8 @@ jobs:
         run: make test-vmware
       - name: L3 API test
         run: make test-api
+      - name: L3 web UI test
+        run: make test-web
       - name: Keep serial logs
         if: always()
         uses: actions/upload-artifact@v6
