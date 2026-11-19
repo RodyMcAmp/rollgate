@@ -1,6 +1,6 @@
 # 0016. How web forms change router.toml: small text edits, checked by parsing again
 
-- Status: Proposed
+- Status: Accepted (by the maintainer, 2026-11-19)
 - Date: 2026-11-19
 - Builds on: 0014
 
