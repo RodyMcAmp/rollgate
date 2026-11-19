@@ -61,7 +61,7 @@ cleanup() {
   if [[ -n $qemu_pid ]]; then kill "$qemu_pid" 2>/dev/null || true; fi
   if [[ -n $server_pid ]]; then kill "$server_pid" 2>/dev/null || true; fi
   gpgconf --homedir "$work/gnupg" --kill all 2>/dev/null || true
-  gpgconf --homedir "$work/root/etc/pacman.d/gnupg" --kill all 2>/dev/null || true
+  gpgconf --homedir "$work/keyring" --kill all 2>/dev/null || true
   umount "$work/root" 2>/dev/null || true
   rm -rf "$work"
 }
@@ -115,13 +115,18 @@ ssh-keygen -q -t ed25519 -N '' -f "$work/key"
 mount -o loop,offset="$root_offset",subvol=/@ "$work/disk.img" "$work/root"
 install -d -m 0700 "$work/root/root/.ssh"
 install -m 0600 "$work/key.pub" "$work/root/root/.ssh/authorized_keys"
-gpg --homedir "$work/root/etc/pacman.d/gnupg" --batch --quiet --import "$work/release-key.asc"
+# Import into a copy of pacman's keyring and copy it back: gpg may start helpers
+# (gpg-agent, keyboxd) that would keep the mounted image busy.
+cp -a "$work/root/etc/pacman.d/gnupg" "$work/keyring"
+gpg --homedir "$work/keyring" --batch --quiet --import "$work/release-key.asc"
+gpgconf --homedir "$work/keyring" --kill all 2>/dev/null || true
+cp -a "$work/keyring/." "$work/root/etc/pacman.d/gnupg/"
+find "$work/root/etc/pacman.d/gnupg" -type s -delete
 echo "$fpr" >> "$work/root/usr/lib/rollgate/release-keys"
 if [[ -n ${ROLLGATE:-} ]]; then
   echo "    testing $ROLLGATE instead of the image's rollgate"
   install -m 0755 "$ROLLGATE" "$work/root/usr/bin/rollgate"
 fi
-gpgconf --homedir "$work/root/etc/pacman.d/gnupg" --kill all 2>/dev/null || true
 umount "$work/root"
 
 go build -o "$work/serve" "$here/serve.go"
