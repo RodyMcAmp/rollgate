@@ -27,6 +27,7 @@ They exist so that new contributors, especially AI agents arriving with no memor
 | [0011](0011-update-trial-boot.md) | Updates: a next root, one trial boot, promotion by rename | Accepted |
 | [0012](0012-release-publishing-and-signing.md) | Publishing releases: GitHub Pages, one signing key, pacman's own checks | Accepted |
 | [0013](0013-clock-sync-timesyncd.md) | The router keeps its clock right with systemd-timesyncd | Accepted |
+| [0014](0014-web-ui.md) | The web UI: an unprivileged web server over a small root API | Accepted |
 
 ## Template
 
