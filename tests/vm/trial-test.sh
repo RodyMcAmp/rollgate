@@ -12,6 +12,8 @@
 #      reboots by itself; the boot of @ deletes @next and records why it failed.
 #   3. A trial that passes: it becomes @ without a reboot (@ becomes @previous),
 #      and the next boot is the updated system.
+#   4. rollgate rollback: after a reboot the original system runs again, and the
+#      updated one is @previous.
 #
 # The image's health wait is 5 minutes; the test shortens it to 90 s with a drop-in.
 #
@@ -241,6 +243,22 @@ expect "running from @" "^/@$" 'findmnt -no FSROOT /'
 [[ $(vm "$uuid_cmd" | tr -d '\r') == "$uuid_b" ]] || die "after a reboot, / isn't the promoted system"
 expect "normal kernel options" "rootflags=subvol=@ " 'cat /proc/cmdline'
 [[ $(state) == promoted ]] || die "update.json changed on the boot after promotion: $(state)"
+expect "status" "Last update: to $date, .*The previous system \($date\) is kept" 'rollgate status'
 echo "    the next boot is the updated system"
 
-log "PASS: a failing trial goes away and a passing one becomes the system, by themselves (log: $serial)"
+log "4. rollgate rollback"
+expect "rollback" "Reboot to start it" 'rollgate rollback'
+expect "status before the reboot" "^Last rollback: .*, from $date back to $date\." 'rollgate status'
+expect "status asks for a reboot" "^  Reboot to start $date\.$" 'rollgate status'
+expect "no update before the reboot" "not @" "ROLLGATE_RELEASES_URL=$url rollgate update $date"
+old_boot=$(vm 'cat /proc/sys/kernel/random/boot_id' | tr -d '\r')
+vm systemctl reboot 2>/dev/null || true
+wait_until "the boot after rollback" "$timeout_s" "[ \"\$(cat /proc/sys/kernel/random/boot_id)\" != $old_boot ]"
+started_cleanly
+expect "running from @" "^/@$" 'findmnt -no FSROOT /'
+[[ $(vm "$uuid_cmd" | tr -d '\r') == "$uuid_a" ]] || die "after rollback and a reboot, / isn't the original system"
+expect "the updated system is @previous" "uuid $uuid_b path @previous$" 'btrfs subvolume list -u /'
+expect "previous system entry" "--id rollgate-previous" 'cat /efi/grub/custom.cfg'
+echo "    the original system runs again; the updated one is kept as @previous"
+
+log "PASS: a failing trial goes away, a passing one becomes the system, and rollback goes back (log: $serial)"

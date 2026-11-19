@@ -42,11 +42,14 @@ changing the router (as root; docs/architecture.md#safe-apply):
                            (or the console), which proves SSH still works
   revert                   undo an unconfirmed apply now
   status                   what is running, what waits for confirmation, whether
-                           router.toml has changes that aren't applied
+                           router.toml has changes that aren't applied, and the
+                           release and last update
   rollback-config [N]      put generation N's router.toml back (default: the
                            confirmed one before the current) and apply it
   update [DATE]            update to the newest release (or DATE) in a copy of the
                            system, then reboot into it once as a trial (ADR 0011)
+  rollback                 make the system before the last update the system
+                           again (it and this one swap places); then reboot
 
 health (docs/architecture.md#health-checks):
   health [-wait SECONDS] [-boot]
@@ -122,11 +125,22 @@ func run(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprint(stderr, usage)
 			return 2
 		}
-		if err := apply.Status(system(stdout), strings.TrimPrefix(config.DefaultPath, "/")); err != nil {
+		s := system(stdout)
+		if err := apply.Status(s, strings.TrimPrefix(config.DefaultPath, "/")); err != nil {
+			fmt.Fprintf(stderr, "rollgate status: %v\n", err)
+			return 1
+		}
+		if err := update.Status(updateSystem(s)); err != nil {
 			fmt.Fprintf(stderr, "rollgate status: %v\n", err)
 			return 1
 		}
 		return 0
+	case "rollback":
+		if len(args) > 1 {
+			fmt.Fprint(stderr, usage)
+			return 2
+		}
+		return change("rollback", func(a apply.System) error { return update.Rollback(updateSystem(a)) }, stdout, stderr)
 	case "rollback-config":
 		n := apply.PreviousConfirmed
 		if len(args) == 2 {

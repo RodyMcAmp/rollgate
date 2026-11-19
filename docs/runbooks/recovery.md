@@ -6,7 +6,7 @@ You need physical access: a monitor and keyboard plugged into the router, or a s
 
 **Logging in at the console:** user `root`. A fresh install has no root password; the login screen reminds you to set one with `passwd`. Do that on day one, and keep the password with this page.
 
-> Commands marked *(planned)* arrive in later milestones. Until M4, use the interim steps where given.
+> Commands marked *(planned)* arrive in later milestones.
 
 ---
 
@@ -26,9 +26,20 @@ rollgate confirm                  keeps them (the console may always confirm)
 
 ## 2. Internet stopped working right after an update
 
-If the router rebooted on its own after the update, it probably already rolled back automatically (M4+). Wait 5 minutes.
+**Wait 10 minutes.** `rollgate update` starts the update once as a trial and keeps it only if every health check passes within 5 minutes. If they don't, or the router hangs, it restarts into the old system by itself.
+Then log in at the console and run `rollgate status`. Its last lines say whether the update was kept ("Last update: to DATE, ...") or failed, and why.
 
-Otherwise:
+If the update was kept but something is still wrong, go back to the system from before it:
+
+```
+rollgate rollback                 the system from before the update becomes the system again
+reboot
+```
+
+`rollgate rollback` keeps the updated system as `@previous`, so nothing is lost; running it again goes forward.
+This is tested automatically on every release (`make test-trial`).
+
+If that doesn't help, or you updated packages by hand with `pacman`, use the boot menu:
 
 1. Reboot the router (power off, wait 10 seconds, power on).
 2. When the GRUB boot menu appears, use the arrow keys.
@@ -41,18 +52,17 @@ Otherwise:
    If the internet works, make the rollback permanent:
 
 ```
-rollgate rollback                 (planned, M4)
-interim (M1–M3):  snapper list                              find the snapshot's number
-                  rollgate-snapshot-rollback <number>
-                  reboot
+snapper list                              find the snapshot's number
+rollgate-snapshot-rollback <number>
+reboot
 ```
 
-The interim command keeps the broken system as `@broken-<date>`, so nothing is lost.
+`rollgate-snapshot-rollback` keeps the broken system as `@broken-<date>`, so nothing is lost.
 This exact sequence is tested automatically on every release (`make test-rollback`).
 
 ## 3. The router won't boot at all
 
-1. If the GRUB menu appears, follow section 2, steps 3–5.
+1. If the GRUB menu appears, follow section 2, boot-menu steps 3–5.
 2. If GRUB doesn't appear, boot from the rollgate USB installer and choose **"Rescue"** *(planned)*. It mounts the router's disk so you can roll back a snapshot or copy off `/etc/rollgate`.
 
 ## 4. Start over (last resort)
@@ -73,5 +83,5 @@ This exact sequence is tested automatically on every release (`make test-rollbac
 | `journalctl -b -p err` | Errors since this boot |
 | `nft list ruleset \| less` | The firewall rules that are actually loaded |
 | `snapper list` | Snapshots and their numbers |
-| `rollgate status` | Which settings are running, whether a change is waiting for `rollgate confirm`, and the recent history |
+| `rollgate status` | Which settings are running, whether a change is waiting for `rollgate confirm`, the recent history, the release, and what the last update did |
 | `rollgate health` | Whether the firewall, WAN, DNS, SSH and services are all working, one line each |

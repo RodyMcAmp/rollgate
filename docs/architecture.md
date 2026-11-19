@@ -119,7 +119,7 @@ Mechanics in ADR 0011; publishing and signing in ADR 0012.
    If they fail, it reboots. If the system hangs or panics, the watchdog or `panic=10` reboots it.
    GRUB consumed the one-shot choice, so every one of those reboots lands on the old `@`.
 
-All six steps work (`compiler/update`, tested by `make test-trial`). The next boot of `@` after a trial that didn't promote deletes `@next` and records why in `/var/lib/rollgate/update.json`. A promotion cut short by a power loss is finished, or treated as a failed trial, on the next boot: `update.json` records `@next`'s subvolume ID before the swap, so that boot can tell whether the swap happened. `rollgate rollback` is *planned* (M4 step 5b).
+All six steps work (`compiler/update`, tested by `make test-trial`). The next boot of `@` after a trial that didn't promote deletes `@next` and records why in `/var/lib/rollgate/update.json`. A promotion cut short by a power loss is finished, or treated as a failed trial, on the next boot: `update.json` records `@next`'s subvolume ID before the swap, so that boot can tell whether the swap happened. `rollgate rollback` swaps `@` and `@previous` the same atomic way, so after a reboot the previous system runs and the updated one is kept as `@previous`; `rollgate status` shows the release and what the last update or rollback did.
 
 The running system is never modified during an update, so a failed update leaves nothing half-finished.
 M1 ships a simpler interim mechanism: snap-pac pre/post snapshots, with rollback chosen by hand from grub-btrfs.
