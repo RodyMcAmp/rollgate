@@ -1,0 +1,25 @@
+# rollgate in VMware Workstation (docs/vmware.md). image/vmware.sh installs this as
+# /etc/rollgate/router.toml; run `rollgate apply` at the VM's console to use it.
+# The MAC addresses are the ones image/vmware.sh gives the VM's network adapters.
+schema_version = 1
+
+[management]
+allowed_zones = ["lan"]
+ssh_authorized_keys = ["admin.pub"]   # your key, installed by image/vmware.sh
+
+# VMware's NAT network: the router's "internet".
+[[interface]]
+name = "wan"
+match_mac = "00:50:56:3a:00:01"
+ipv4 = "dhcp"
+
+# VMnet2: a host-only network set to 192.168.50.0/24 with VMware's DHCP turned off.
+# Your PC is 192.168.50.1 on it; the router is 192.168.50.2.
+[[interface]]
+name = "lan"
+match_mac = "00:50:56:3a:00:02"
+ipv4 = "192.168.50.2/24"
+
+# Other VMs on VMnet2 get an address here and reach the internet through the router.
+[dhcp.lan]
+range = ["192.168.50.100", "192.168.50.199"]

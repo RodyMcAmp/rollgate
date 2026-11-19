@@ -55,7 +55,10 @@ Architecture, config spec draft, ADRs 0001–0008, the agent and contributor pro
 
 ## M5 — Real-hardware pilot
 
+- First in VMware Workstation ([vmware.md](vmware.md)): `make vmware` builds a ready VM, tested so far in QEMU emulating VMware's NVMe disk and vmxnet3 adapters.
 - Install on the maintainers' hardware. Run it as the home router for at least four weekly releases.
+- Minimum hardware *(planned, to be confirmed by the pilot)*: 64-bit Intel or AMD from Sandy Bridge (2011) on, UEFI boot with Secure Boot off, 2 GB RAM, a 32 GB disk, and 2 Ethernet ports (Intel preferred).
+- Before real hardware: the root filesystem grows to fill the disk, and the clock is kept in sync (a dead CMOS battery would otherwise break signature checks) *(planned)*.
 - Do every procedure in `docs/runbooks/recovery.md` for real at least once, and fix the runbook wherever reality differs.
 - Hardware notes: NIC compatibility list, watchdog availability.
 

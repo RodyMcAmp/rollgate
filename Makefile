@@ -14,12 +14,12 @@ SUDO := $(if $(filter 0,$(shell id -u)),,sudo)
 SHELL_SCRIPTS := image/build.sh tests/vm/boot-test.sh tests/vm/rollback-test.sh \
 	tests/vm/apply-test.sh tests/vm/ipv6-test.sh tests/vm/trial-test.sh \
 	tests/vm/update-test.sh tests/netns/run.sh release/publish.sh release/dry-run.sh \
-	release/bump.sh packaging/build.sh \
+	release/bump.sh packaging/build.sh image/vmware.sh tests/vm/vmware-test.sh \
 	image/rootfs/usr/local/sbin/rollgate-snapshot-rollback \
 	image/rootfs/usr/local/lib/rollgate/boot-report
 
 .PHONY: check golden-update rollgate rollgate-release release-dry-run package test-netns \
-	image image-previous test-vm test-apply test-ipv6 test-trial test-rollback test-update clean
+	image image-previous vmware test-vmware test-vm test-apply test-ipv6 test-trial test-rollback test-update clean
 
 ## L0 + L1: shell lint, Go format/vet/lint/tests, and the example config validates.
 ## Run before every commit.
@@ -29,7 +29,7 @@ check: rollgate rollgate-release
 	  if [ -n "$$unformatted" ]; then echo "gofmt needed: $$unformatted"; exit 1; fi
 	cd compiler && go vet ./... && staticcheck ./... && go test ./...
 	cd compiler && go run ./cmd/rollgate validate ../examples/router.toml
-	cd compiler && for f in ../tests/vm/apply/*.toml ../tests/vm/ipv6/*.toml; do go run ./cmd/rollgate validate "$$f" || exit 1; done
+	cd compiler && for f in ../tests/vm/apply/*.toml ../tests/vm/ipv6/*.toml ../image/vmware/router.toml; do go run ./cmd/rollgate validate "$$f" || exit 1; done
 	cd compiler && for f in ../tests/netns/*.go ../tests/vm/*.go; do go vet "$$f" || exit 1; done
 	bash release/dry-run.sh
 
@@ -65,6 +65,12 @@ test-netns: rollgate
 image: rollgate
 	$(SUDO) BUILD_DIR=$(BUILD_DIR) ROLLGATE=$(abspath $(BUILD_DIR)/rollgate) bash image/build.sh
 
+## Turn the image into a VMware Workstation VM (docs/vmware.md). Needs SSH_KEY, your
+## SSH public key file; VMWARE_DIR is where the VM's folder goes.
+VMWARE_DIR ?= $(BUILD_DIR)/vmware
+vmware:
+	$(SUDO) SSH_KEY="$(SSH_KEY)" bash image/vmware.sh $(IMAGE) "$(VMWARE_DIR)"
+
 ## Build the L4 update test's "previous release" image, a week before image/snapshot-date.
 image-previous: rollgate
 	$(SUDO) BUILD_DIR=$(BUILD_DIR) IMAGE_DATE=$(PREVIOUS_DATE) ROLLGATE=$(abspath $(BUILD_DIR)/rollgate) bash image/build.sh
@@ -94,6 +100,11 @@ test-ipv6:
 ## Needs internet access (the Arch Linux Archive).
 test-trial:
 	$(SUDO) LOG_DIR=$(BUILD_DIR)/test-logs bash tests/vm/trial-test.sh $(IMAGE)
+
+## L3: make vmware's VM boots on VMware's virtual hardware (NVMe, vmxnet3, emulated by
+## QEMU) and its router.toml applies and passes the health checks (docs/vmware.md).
+test-vmware:
+	$(SUDO) LOG_DIR=$(BUILD_DIR)/test-logs bash tests/vm/vmware-test.sh $(IMAGE)
 
 ## L3: rollback rehearsal following docs/runbooks/recovery.md.
 test-rollback:
