@@ -116,4 +116,7 @@ log "  confirmed from a new connection to 192.168.50.2"
 out=$(vm "$((ssh_port + 1))" 'rollgate health -wait 120' 2>&1) || die "health checks failed:
 $out"
 log "  every health check passes"
+size=$(vm "$((ssh_port + 1))" 'df -B1 --output=size / | tail -n 1' | tr -d ' ')
+((size > 30 * 1024 ** 3)) || die "the root filesystem is $size bytes; it should have grown to fill the 32 GB disk"
+log "  the root filesystem grew to fill the 32 GB disk"
 echo "vmware-test: PASS"

@@ -105,6 +105,17 @@ See [build-and-release.md](build-and-release.md) for the release train. On the d
 `/etc/rollgate` (the user config) sits inside `@`, so a system rollback also rolls back the config to match.
 After a rollback, `rollgate` offers to re-apply the newest config if it validates against the older system.
 
+#### Disk growth
+
+The image is 8 GB. Written to a bigger disk, the Btrfs partition grows to fill it at boot:
+
+1. `systemd-repart.service` grows the root partition (`/etc/repart.d/50-rollgate-root.conf`) and moves the backup GPT to the end of the disk. The ESP isn't listed, so it stays as it is.
+2. `rollgate-growfs.service` grows the mounted Btrfs filesystem to fill the partition (`btrfs filesystem resize max /`).
+
+Both do nothing once the disk is full, and both skip a snapshot booted from the GRUB menu, whose root is a temporary overlay.
+These are image files, so a router gets them from its install image, not from updates; growing matters only once, at the first boot.
+`make test-vm` boots the image from a 12 GB disk and checks that the partition and filesystem fill it.
+
 ### Update flow (`rollgate update`, M4)
 
 Mechanics in ADR 0011; publishing and signing in ADR 0012.
