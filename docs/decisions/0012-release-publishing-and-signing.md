@@ -1,6 +1,6 @@
 # 0012. Publishing releases: GitHub Pages, one signing key, pacman's own checks
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-18
 
 ## Context

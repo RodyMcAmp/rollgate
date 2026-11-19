@@ -1,6 +1,6 @@
 # 0011. Updates: a next root, one trial boot, promotion by rename
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-18
 
 ## Context

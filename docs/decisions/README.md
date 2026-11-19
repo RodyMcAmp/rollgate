@@ -24,8 +24,8 @@ They exist so that new contributors, especially AI agents arriving with no memor
 | [0008](0008-ipv6-auto.md) | IPv6 is one setting: `auto` or `off` | Accepted |
 | [0009](0009-image-build-with-pacstrap.md) | Build the image with pacstrap scripts; GRUB's files on the ESP | Accepted |
 | [0010](0010-safe-apply.md) | Safe apply: generations, commit-confirm, revert at boot | Accepted |
-| [0011](0011-update-trial-boot.md) | Updates: a next root, one trial boot, promotion by rename | Proposed |
-| [0012](0012-release-publishing-and-signing.md) | Publishing releases: GitHub Pages, one signing key, pacman's own checks | Proposed |
+| [0011](0011-update-trial-boot.md) | Updates: a next root, one trial boot, promotion by rename | Accepted |
+| [0012](0012-release-publishing-and-signing.md) | Publishing releases: GitHub Pages, one signing key, pacman's own checks | Accepted |
 
 ## Template
 

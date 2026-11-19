@@ -107,7 +107,7 @@ After a rollback, `rollgate` offers to re-apply the newest config if it validate
 
 ### Update flow (`rollgate update`, M4)
 
-Mechanics in ADR 0011 *(proposed)*; publishing and signing in ADR 0012 *(proposed)*.
+Mechanics in ADR 0011; publishing and signing in ADR 0012.
 
 1. Read the target release date: the newest `current` date in the signed `releases.json`, or one the user gives.
 2. Create `@next`, a writable snapshot of the running root `@`.
