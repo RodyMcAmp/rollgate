@@ -193,8 +193,9 @@ cp -a "$work/keyring/." "$work/root/etc/pacman.d/gnupg/"
 find "$work/root/etc/pacman.d/gnupg" -type s -delete
 echo "$fpr" >> "$work/root/usr/lib/rollgate/release-keys"
 # The [rollgate] repository as image/build.sh writes it with a release key, but served
-# by the host (rollgate update moves it with ROLLGATE_REPO_URL).
-cat >> "$work/root/etc/pacman.conf" <<'EOF'
+# by the host (rollgate update moves it with ROLLGATE_REPO_URL). An image built with
+# image/release-key.asc already has the section.
+grep -qx '\[rollgate\]' "$work/root/etc/pacman.conf" || cat >> "$work/root/etc/pacman.conf" <<'EOF'
 
 [rollgate]
 SigLevel = Required

@@ -10,7 +10,7 @@
 #         ROLLGATE       the static rollgate binary to install (default: $BUILD_DIR/rollgate,
 #                        built by make rollgate; make image builds it first)
 #         RELEASE_KEY_FILE  the release signing key's public half (default:
-#                        image/release-key.asc, once the maintainer has created it)
+#                        image/release-key.asc)
 #
 # Output: $BUILD_DIR/rollgate-<date>.img (raw GPT disk, UEFI) and a .sha256 file.
 #
@@ -206,7 +206,7 @@ ln -sf /usr/share/zoneinfo/UTC "$mnt/etc/localtime"
 
 # The release signing key (ADR 0012): rollgate update accepts releases.json only when
 # it is signed by a key listed in release-keys, so a router can update only if its
-# image carries the key. Until the maintainer creates it, updates stay off.
+# image carries the key. Without it (RELEASE_KEY_FILE pointing nowhere), updates stay off.
 release_key=${RELEASE_KEY_FILE:-$image_dir/release-key.asc}
 release_fpr=
 if [[ -f $release_key ]]; then

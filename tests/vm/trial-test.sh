@@ -129,6 +129,11 @@ gpgconf --homedir "$work/keyring" --kill all 2>/dev/null || true
 cp -a "$work/keyring/." "$work/root/etc/pacman.d/gnupg/"
 find "$work/root/etc/pacman.d/gnupg" -type s -delete
 echo "$fpr" >> "$work/root/usr/lib/rollgate/release-keys"
+# An image built with image/release-key.asc has the [rollgate] repository, published
+# by the release workflow, which this test doesn't serve (the L4 test does). Without
+# it, pacman -Syu needs only the archive.
+sed -i "/^# rollgate's own packages/d; /^\[rollgate\]$/,/^Include = \/etc\/pacman.d\/rollgate-mirrorlist$/d" "$work/root/etc/pacman.conf"
+rm -f "$work/root/etc/pacman.d/rollgate-mirrorlist"
 # A check that fails on a trial boot while the flag exists (/var/lib/rollgate is
 # shared by every root, so the test can set the flag from @).
 cat > "$work/root/usr/lib/rollgate/health.d/99-trial-test" <<'EOF'
