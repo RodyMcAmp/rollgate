@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Install check tools
-        run: pacman -Syu --noconfirm --needed make shellcheck go staticcheck
+        run: pacman -Syu --noconfirm --needed make shellcheck go staticcheck fakeroot
       - run: make check
 
   netns:
@@ -48,7 +48,8 @@ jobs:
           pacman-key --init
           pacman-key --populate archlinux
           pacman -Syu --noconfirm --needed make arch-install-scripts btrfs-progs \
-            dosfstools gptfdisk grub qemu-system-x86 edk2-ovmf openssh
+            dosfstools gptfdisk grub qemu-system-x86 edk2-ovmf openssh go \
+            iproute2 iputils dnsmasq fakeroot
       # The pinned snapshot's packages never change, so keep them between runs
       # instead of downloading ~625 MB from archive.archlinux.org every time.
       # pacman still checks every package's signature when installing.
@@ -62,6 +63,12 @@ jobs:
         run: make image
       - name: L3 boot test
         run: make test-vm
+      - name: L3 apply test
+        run: make test-apply
+      - name: L3 IPv6 test
+        run: make test-ipv6
+      - name: L3 update trial test
+        run: make test-trial
       - name: L3 rollback rehearsal
         run: make test-rollback
       - name: Keep serial logs
@@ -69,5 +76,40 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: serial-logs
+          path: build/test-logs/
+          if-no-files-found: ignore
+
+  update:
+    name: L4 update test
+    needs: check
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install build tools
+        run: |
+          pacman-key --init
+          pacman-key --populate archlinux
+          pacman -Syu --noconfirm --needed make arch-install-scripts btrfs-progs \
+            dosfstools gptfdisk grub qemu-system-x86 edk2-ovmf openssh go fakeroot
+      # The previous release's packages, cached like the image job's. The update
+      # itself downloads the week's changes (~400 MB) inside the VM, as a router would.
+      - name: Restore package cache
+        uses: actions/cache@v5
+        with:
+          path: build/pkgcache
+          key: pkgcache-previous-${{ hashFiles('image/snapshot-date', 'image/packages.txt') }}
+          restore-keys: pkgcache-previous-
+      - name: Build the previous release's image
+        run: make image-previous
+      - name: L4 update test
+        run: make test-update
+      - name: Keep serial logs
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: serial-logs-update
           path: build/test-logs/
           if-no-files-found: ignore

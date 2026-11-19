@@ -1,0 +1,4 @@
+#!/bin/sh
+# rollgate health check (docs/architecture.md#health-checks): the nftables ruleset is loaded and has the rollgate table.
+# The logic is in rollgate (compiler/health); exit 0 passes.
+exec /usr/bin/rollgate check firewall

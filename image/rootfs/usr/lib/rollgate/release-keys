@@ -1,0 +1,3 @@
+# Fingerprints of the keys allowed to sign releases.json (ADR 0012), one per line.
+# rollgate update refuses to run while none is listed. The project's key is added
+# here once the maintainer has created it.

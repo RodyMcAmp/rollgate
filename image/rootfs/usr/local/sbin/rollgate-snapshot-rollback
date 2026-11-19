@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Interim (M1–M3) system rollback. Replaced by `rollgate rollback` in M4.
+# Goes back to any snapper snapshot (docs/runbooks/recovery.md, section 2). To go back
+# to the system from before the last `rollgate update`, use `rollgate rollback`.
 #
 # Usage: rollgate-snapshot-rollback <snapshot-number>     (numbers: `snapper list`)
 #

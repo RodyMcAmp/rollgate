@@ -1,0 +1,8 @@
+# Image default until the first `rollgate apply`: every wired port asks for an address
+# over DHCP, so a new router is reachable. The name matches rollgate's own networkd
+# files, so the first apply removes it (and a revert to generation 0 restores it).
+[Match]
+Name=en*
+
+[Network]
+DHCP=yes
