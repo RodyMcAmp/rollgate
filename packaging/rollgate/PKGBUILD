@@ -26,6 +26,8 @@ package() {
   # ADR 0013: systemd-timesyncd keeps the clock right, on routers that update too.
   install -dm0755 "$pkgdir/usr/lib/systemd/system/sysinit.target.wants"
   ln -s ../systemd-timesyncd.service "$pkgdir/usr/lib/systemd/system/sysinit.target.wants/systemd-timesyncd.service"
+  # ADR 0015: time servers by IP address when names can't be looked up.
+  install -Dm0644 "$startdir/timesyncd.conf" "$pkgdir/usr/lib/systemd/timesyncd.conf.d/10-rollgate.conf"
   install -dm0755 "$pkgdir/etc/rollgate"
   install -dm0700 "$pkgdir/etc/rollgate/secrets"
 }
