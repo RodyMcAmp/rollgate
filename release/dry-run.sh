@@ -32,15 +32,15 @@ export GNUPGHOME=$work/gnupg ROLLGATE_RELEASE=$tool
 RELEASE_KEY=$(newkey "$GNUPGHOME")
 export RELEASE_KEY
 
-"$here/publish.sh" "$work/site" "$previous" >/dev/null
-"$here/publish.sh" "$work/site" "$date" > "$work/out"
+bash "$here/publish.sh" "$work/site" "$previous" >/dev/null
+bash "$here/publish.sh" "$work/site" "$date" > "$work/out"
 grep -q "\"date\": \"$previous\", \"status\": \"previous\"" "$work/out" || die "$previous isn't previous:
 $(cat "$work/out")"
 grep -q "\"date\": \"$date\", \"status\": \"current\"" "$work/out" || die "$date isn't current:
 $(cat "$work/out")"
 echo "release-dry-run: published $previous, then $date; signed and verified"
 
-"$here/publish.sh" "$work/site" "$previous" >/dev/null 2>&1 && die "publishing an older date was accepted"
+bash "$here/publish.sh" "$work/site" "$previous" >/dev/null 2>&1 && die "publishing an older date was accepted"
 
 "$tool" withdraw "$work/site/releases.json" "$date"
 [[ ! -e $work/site/releases.json.sig ]] || die "withdraw left a stale signature"

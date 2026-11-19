@@ -127,7 +127,7 @@ jobs:
             git worktree add --orphan -b gh-pages build/site
           fi
           make rollgate-release
-          release/publish.sh build/site "$date"
+          bash release/publish.sh build/site "$date"
           cd build/site
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
