@@ -36,8 +36,9 @@ table inet rollgate {
 		iifname {{set .Services}} meta l4proto { tcp, udp } th dport 53 accept
 {{- end}}
 
-		# SSH from management.allowed_zones only.
-		iifname {{set .Management}} tcp dport 22 accept
+		# SSH, and the web UI (HTTPS, and HTTP that only redirects to it), from
+		# management.allowed_zones only (ADR 0014).
+		iifname {{set .Management}} tcp dport { 22, 80, 443 } accept
 	}
 
 	# Traffic passing through the router.

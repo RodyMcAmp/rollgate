@@ -1,0 +1,36 @@
+# rollgate web (ADR 0014), started by rollgate-web.socket on the first visit.
+# It runs as a throwaway unprivileged user with no capabilities and a read-only
+# system, and changes nothing itself: it asks rollgate api, whose socket only
+# the rollgate-api group may open. The certificate, key and password hash reach
+# it as systemd credentials, readable only by this service.
+[Unit]
+Description=rollgate: web UI
+Requires=rollgate-web.socket rollgate-api.socket
+After=rollgate-web.socket rollgate-api.socket
+
+[Service]
+ExecStart=/usr/bin/rollgate web
+DynamicUser=yes
+SupplementaryGroups=rollgate-api
+LoadCredential=web.crt:/etc/rollgate/secrets/web.crt
+LoadCredential=web.key:/etc/rollgate/secrets/web.key
+LoadCredential=web-password:/etc/rollgate/secrets/web-password
+CapabilityBoundingSet=
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service

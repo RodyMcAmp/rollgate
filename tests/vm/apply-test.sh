@@ -103,7 +103,7 @@ check_good_config() {
   expect "lan address" "10\.0\.2\.15/24" 'ip -br addr show lan'
   expect "wan renamed" "^wan " 'ip -br link show wan'
   expect "iot VLAN" "192\.168\.20\.1/24" 'ip -br addr show iot'
-  expect "firewall" 'iifname ([{] )?"lan"( [}])? tcp dport 22' 'nft list table inet rollgate'
+  expect "firewall" 'iifname ([{] )?"lan"( [}])? tcp dport [{] 22, 80, 443 [}]' 'nft list table inet rollgate'
   expect "services" "^active
 active$" 'systemctl is-active dnsmasq unbound'
   expect "placeholder networking removed" "^gone$" 'test -e /etc/systemd/network/99-rollgate-unconfigured.network || echo gone'

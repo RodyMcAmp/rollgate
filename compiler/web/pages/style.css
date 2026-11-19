@@ -1,0 +1,21 @@
+/* rollgate web UI (ADR 0014). Served by the router itself; no outside resources. */
+:root { color-scheme: light dark; --fg: #1d2125; --bg: #f6f7f9; --card: #fff; --line: #d8dde3; --ok: #1a7f37; --bad: #c62828; --accent: #2457c5; }
+@media (prefers-color-scheme: dark) {
+  :root { --fg: #e6e8eb; --bg: #15181c; --card: #1e2227; --line: #343a42; --ok: #4cc26a; --bad: #ff6b6b; --accent: #7aa2ff; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; font: 16px/1.5 system-ui, sans-serif; color: var(--fg); background: var(--bg); }
+header { display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; background: var(--card); border-bottom: 1px solid var(--line); }
+header h1 { margin: 0; font-size: 1.25rem; }
+main { max-width: 60rem; margin: 0 auto; padding: 1rem; }
+main.narrow { max-width: 22rem; margin-top: 10vh; }
+section { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 0.5rem 1rem; margin-bottom: 1rem; }
+h2 { font-size: 1.05rem; }
+pre { overflow-x: auto; font-size: 0.85rem; white-space: pre-wrap; }
+form label { display: block; margin-bottom: 0.25rem; }
+input[type=password] { width: 100%; padding: 0.5rem; font-size: 1rem; border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--fg); }
+button { margin-top: 0.75rem; padding: 0.5rem 1.25rem; font-size: 1rem; border: 0; border-radius: 6px; background: var(--accent); color: #fff; cursor: pointer; }
+button.link { margin: 0; padding: 0; background: none; color: var(--accent); }
+.ok { color: var(--ok); font-weight: normal; }
+.bad, .error { color: var(--bad); font-weight: normal; }
+.hint { font-size: 0.9rem; opacity: 0.8; }

@@ -1,0 +1,13 @@
+# The web UI's ports (ADR 0014): HTTPS on 443, and HTTP on 80, which only
+# redirects to HTTPS. systemd opens them, so the server needs no privileges.
+# The firewall lets only management.allowed_zones reach them; WAN never can.
+# Enabled by rollgate web-password: the web UI stays off until a password is set.
+[Unit]
+Description=rollgate: web UI ports
+
+[Socket]
+ListenStream=443
+ListenStream=80
+
+[Install]
+WantedBy=sockets.target

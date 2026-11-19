@@ -64,6 +64,14 @@ health (docs/architecture.md#health-checks):
                            clean up after one (ADR 0011)
   check NAME               run one built-in check (` + "firewall, wan, dns, ssh, services" + `);
                            the scripts in health.d call this
+
+web UI (ADR 0014):
+  web-password [--stdin]   set the web UI's admin password (asked twice, or one
+                           line from stdin), make its HTTPS certificate if there
+                           is none (prints its fingerprint), and turn the web UI on
+  web                      the web UI's server (rollgate-web.service runs it)
+  api [-listen PATH]       serve the local API the web UI uses, on the socket
+                           rollgate-api.socket passes (or a new one at PATH)
 `
 
 func main() {
@@ -129,17 +137,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprint(stderr, usage)
 			return 2
 		}
-		s := system(stdout)
-		if err := apply.Status(s, strings.TrimPrefix(config.DefaultPath, "/")); err != nil {
+		if err := status(system(stdout), stdout); err != nil {
 			fmt.Fprintf(stderr, "rollgate status: %v\n", err)
 			return 1
 		}
-		if err := update.Status(updateSystem(s)); err != nil {
-			fmt.Fprintf(stderr, "rollgate status: %v\n", err)
-			return 1
-		}
-		_, clock := update.Clock(s.Run)
-		fmt.Fprintf(stdout, "Clock: %s.\n", clock)
 		return 0
 	case "rollback":
 		if len(args) > 1 {
@@ -178,6 +179,12 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return updateCmd(want, stdout, stderr)
 	case "health":
 		return healthCmd(args[1:], stdout, stderr)
+	case "api":
+		return apiCmd(args[1:], stderr)
+	case "web-password":
+		return webPasswordCmd(args[1:], stdout, stderr)
+	case "web":
+		return webCmd(args[1:], stderr)
 	case "check":
 		if len(args) != 2 || health.Checks[args[1]] == nil {
 			fmt.Fprint(stderr, usage)
@@ -206,19 +213,23 @@ func run(args []string, stdout, stderr io.Writer) int {
 // updateCmd is rollgate update [DATE] (ADR 0011): prepare @next, arm its
 // trial boot, reboot into it.
 func updateCmd(want string, stdout, stderr io.Writer) int {
-	return change("update", func(a apply.System) error {
-		err := update.Prepare(updateSystem(a), want)
-		if errors.Is(err, update.ErrUpToDate) {
-			return nil
-		}
-		if err != nil {
-			return fmt.Errorf("%w%s", err, update.ClockHint(a.Run))
-		}
-		if out, err := a.Run.Run("systemctl", "reboot"); err != nil {
-			return fmt.Errorf("the trial is armed, but rebooting failed (%v: %s); reboot to start it", err, out)
-		}
+	return change("update", func(a apply.System) error { return updateRouter(a, want) }, stdout, stderr)
+}
+
+// updateRouter prepares @next for want ("" for the newest release), arms its
+// trial boot and reboots into it. Already up to date isn't an error.
+func updateRouter(a apply.System, want string) error {
+	err := update.Prepare(updateSystem(a), want)
+	if errors.Is(err, update.ErrUpToDate) {
 		return nil
-	}, stdout, stderr)
+	}
+	if err != nil {
+		return fmt.Errorf("%w%s", err, update.ClockHint(a.Run))
+	}
+	if out, err := a.Run.Run("systemctl", "reboot"); err != nil {
+		return fmt.Errorf("the trial is armed, but rebooting failed (%v: %s); reboot to start it", err, out)
+	}
+	return nil
 }
 
 // updateSystem is the real router for rollgate update.
@@ -349,23 +360,14 @@ func diffCmd(args []string, stdout, stderr io.Writer) int {
 	if !ok || !localPrefix(c, *root, stderr) {
 		return 2
 	}
-	files, err := compile.Compile(c, source, filepath.Base(path))
-	var changes []compile.Change
-	if err == nil {
-		changes, err = files.Compare(*root)
-	}
+	n, err := diff(c, source, filepath.Base(path), *root, stdout)
 	if err != nil {
 		fmt.Fprintf(stderr, "rollgate diff: %v\n", err)
 		return 2
 	}
-	for _, ch := range changes {
-		fmt.Fprintf(stdout, "%s: %s\n%s\n", ch.Kind, filepath.Join(*root, filepath.FromSlash(ch.Path)), ch.Diff)
-	}
-	if len(changes) == 0 {
-		fmt.Fprintln(stdout, "no changes")
+	if n == 0 {
 		return 0
 	}
-	fmt.Fprintf(stdout, "%d file(s) would change\n", len(changes))
 	return 1
 }
 
@@ -426,18 +428,24 @@ func load(path string, stderr io.Writer) (*config.Config, []byte, bool) {
 		fmt.Fprintf(stderr, "%s: %s %v\n", path, config.CodeUnreadable, err)
 		return nil, nil, false
 	}
+	c, ok := parse(source, path, stderr)
+	return c, source, ok
+}
+
+// parse validates a config, printing every problem to w, each starting with name.
+func parse(source []byte, name string, w io.Writer) (*config.Config, bool) {
 	c, err := config.Parse(source)
 	var problems config.Problems
 	switch {
 	case err == nil:
-		return c, source, true
+		return c, true
 	case errors.As(err, &problems):
 		for _, p := range problems {
-			fmt.Fprintf(stderr, "%s: %s\n", path, p)
+			fmt.Fprintf(w, "%s: %s\n", name, p)
 		}
-		fmt.Fprintf(stderr, "%s: %d problem(s); see docs/config-spec.md#validation-rules\n", path, len(problems))
+		fmt.Fprintf(w, "%s: %d problem(s); see docs/config-spec.md#validation-rules\n", name, len(problems))
 	default:
-		fmt.Fprintf(stderr, "%s: %v\n", path, err)
+		fmt.Fprintf(w, "%s: %v\n", name, err)
 	}
-	return nil, nil, false
+	return nil, false
 }

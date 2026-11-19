@@ -1,0 +1,15 @@
+# The local API the web UI uses (ADR 0014). Only root and the rollgate-api group
+# (the web server, once it exists) can open the socket; the kernel checks that.
+# Not enabled by default: rollgate web-password turns it on with the web UI.
+[Unit]
+Description=rollgate: local API for the web UI
+
+[Socket]
+ListenStream=/run/rollgate/api.sock
+SocketUser=root
+SocketGroup=rollgate-api
+SocketMode=0660
+RemoveOnStop=yes
+
+[Install]
+WantedBy=sockets.target
