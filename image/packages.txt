@@ -21,6 +21,8 @@ grub-btrfs
 inotify-tools
 snapper
 snap-pac
+# rollgate update chroots into the next root to run pacman (ADR 0011)
+arch-install-scripts
 
 # Networking (ADR 0006). dnsmasq and unbound stay disabled until `rollgate apply`
 # enables them with a generated config.

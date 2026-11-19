@@ -66,7 +66,7 @@ M3 (safe apply). Anything marked
 | `tests/vm/` | L3 QEMU boot test and rollback rehearsal. |
 | `tests/golden/` | L1 golden tests: each `<case>/router.toml` and the exact files it must compile to. |
 | `tests/netns/` | L2 namespace test: `run.sh`, its `router.toml`, a TCP listener and a DHCP/DNS probe. |
-| `compiler/` | Go source for the `rollgate` CLI: `validate`, `compile` (networkd, sysctl, nftables, dnsmasq, Unbound, sshd, IPv6 auto), `diff`, `schema`, `apply`, `confirm`, `revert`, `status` and `rollback-config` (ADR 0010, code in `compiler/apply/`), and `health` and `check` (`compiler/health/`) work. The image ships it as `/usr/bin/rollgate`, with `rollgate-boot.service`. Templates are in `compiler/templates/`. |
+| `compiler/` | Go source for the `rollgate` CLI: `validate`, `compile` (networkd, sysctl, nftables, dnsmasq, Unbound, sshd, IPv6 auto), `diff`, `schema`, `apply`, `confirm`, `revert`, `status` and `rollback-config` (ADR 0010, code in `compiler/apply/`), and `health` and `check` (`compiler/health/`), and `update` (ADR 0011, `compiler/update/`: prepares `@next` and arms its trial boot; promotion is M4 step 5) work. The image ships it as `/usr/bin/rollgate`, with `rollgate-boot.service`. Templates are in `compiler/templates/`. |
 | `packaging/` *(planned)* | PKGBUILDs for our own packages (e.g. `rollgate` itself). |
 
 ## Commands
@@ -82,6 +82,7 @@ Run `image` and `test-vm` on an Arch host as root (or with sudo); see `docs/dev-
 | `make test-vm` | L3: boots the image in QEMU under UEFI with both kernels, and on a machine without a hardware watchdog, and checks for a clean boot with a watchdog armed. |
 | `make test-apply` | L3: `rollgate apply` in a VM. Confirm only from a new connection; a config that locks out SSH reverts by itself, by the timer and across a power cut (ADR 0010). A crashed kernel is reset by the watchdog. |
 | `make test-ipv6` | L3: `ipv6 = "auto"` in a VM with a fake ISP and a LAN client: local IPv6 when the ISP has none, public IPv6 by prefix delegation once it does, no IPv6 NAT, no way in from the internet (ADR 0008). |
+| `make test-trial` | L3: `rollgate update` in a VM prepares `@next` and arms one trial boot of it; the trial boots from `@next`, and the boot after it is `@` again (ADR 0011). Needs internet. |
 | `make test-rollback` | L3: rollback rehearsal. Bad update → boot the pre-update snapshot from the GRUB menu → `rollgate-snapshot-rollback` → restored system boots. Follows `docs/runbooks/recovery.md`; keep the two in sync. |
 | `make test-netns` | L2: runs apply's pre-checks with the real `nft`, `dnsmasq`, `unbound-checkconf` and `sshd`, then loads the generated firewall and sysctl settings into network namespaces, runs dnsmasq and sshd with their generated configs, and checks real traffic: firewall policy, NAT, port forwards, DHCP, local DNS and SSH logins (needs root). |
 | `make test-update` *(planned, M4)* | L4: installs the previous release, updates to this one, forces a failure, verifies rollback. |

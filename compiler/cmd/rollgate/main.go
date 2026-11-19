@@ -19,6 +19,7 @@ import (
 	"github.com/RodyMcAmp/rollgate/compiler/compile"
 	"github.com/RodyMcAmp/rollgate/compiler/config"
 	"github.com/RodyMcAmp/rollgate/compiler/health"
+	"github.com/RodyMcAmp/rollgate/compiler/update"
 )
 
 const usage = `usage: rollgate <command> [arguments]
@@ -44,6 +45,8 @@ changing the router (as root; docs/architecture.md#safe-apply):
                            router.toml has changes that aren't applied
   rollback-config [N]      put generation N's router.toml back (default: the
                            confirmed one before the current) and apply it
+  update [DATE]            update to the newest release (or DATE) in a copy of the
+                           system, then reboot into it once as a trial (ADR 0011)
 
 health (docs/architecture.md#health-checks):
   health [-wait SECONDS]   run the checks in ` + health.Dir + `; with -wait,
@@ -140,6 +143,16 @@ func run(args []string, stdout, stderr io.Writer) int {
 			}
 			return applyFile(s, config.DefaultPath, stderr)
 		}, stdout, stderr)
+	case "update":
+		if len(args) > 2 {
+			fmt.Fprint(stderr, usage)
+			return 2
+		}
+		want := ""
+		if len(args) == 2 {
+			want = args[1]
+		}
+		return updateCmd(want, stdout, stderr)
 	case "health":
 		return healthCmd(args[1:], stdout, stderr)
 	case "check":
@@ -165,6 +178,31 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "rollgate: unknown command %q\n\n%s", args[0], usage)
 		return 2
 	}
+}
+
+// updateCmd is rollgate update [DATE] (ADR 0011): prepare @next, arm its
+// trial boot, reboot into it.
+func updateCmd(want string, stdout, stderr io.Writer) int {
+	return change("update", func(a apply.System) error {
+		url := os.Getenv("ROLLGATE_RELEASES_URL") // for tests; routers use the default
+		if url == "" {
+			url = update.DefaultReleasesURL
+		}
+		s := update.System{Root: a.Root, Run: a.Run, Stream: update.StreamExec, Out: stdout, Now: time.Now,
+			Get: update.HTTPGet, Verify: update.GPGVerify(filepath.Join(a.Root, update.PacmanGnupg)),
+			URL: url, Free: update.FreeBytes}
+		err := update.Prepare(s, want)
+		if errors.Is(err, update.ErrUpToDate) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if out, err := a.Run.Run("systemctl", "reboot"); err != nil {
+			return fmt.Errorf("the trial is armed, but rebooting failed (%v: %s); reboot to start it", err, out)
+		}
+		return nil
+	}, stdout, stderr)
 }
 
 // healthCmd runs the health checks: exit 0 if all pass, 1 if any fails.

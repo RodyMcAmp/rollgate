@@ -113,11 +113,13 @@ Mechanics in ADR 0011; publishing and signing in ADR 0012.
 2. Create `@next`, a writable snapshot of the running root `@`.
 3. Inside `@next` (`arch-chroot`): point pacman at the target date's archive and run `pacman -Syu`.
    This regenerates the initramfs for both `linux` and `linux-lts`.
-4. Write a GRUB entry for `@next` and arm it once with `grub-reboot`. The default entry stays `@`.
+4. Write a GRUB entry for `@next` to `/efi/grub/custom.cfg` and arm it once (GRUB's `next_entry`, which is what `grub-reboot` sets). The default entry stays `@`.
 5. Reboot into the trial. The hardware watchdog is enabled (`RuntimeWatchdogSec=` in systemd, falling back to `softdog`).
 6. `rollgate-health.service` runs the health checks. If they pass within 5 minutes, it promotes the trial by renaming: `@` becomes `@previous`, `@next` becomes `@`.
    If they fail, it reboots. If the system hangs or panics, the watchdog or `panic=10` reboots it.
    GRUB consumed the one-shot choice, so every one of those reboots lands on the old `@`.
+
+Steps 1–5 work today (`compiler/update`, tested by `make test-trial`). Promotion, and cleaning up after a failed trial, are *planned* (M4 step 5): until then a trial is never promoted, and the next boot is `@` again.
 
 The running system is never modified during an update, so a failed update leaves nothing half-finished.
 M1 ships a simpler interim mechanism: snap-pac pre/post snapshots, with rollback chosen by hand from grub-btrfs.

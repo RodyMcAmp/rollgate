@@ -38,10 +38,13 @@ type System struct {
 
 func (s System) store() Store { return Store{s.Root} }
 
-// lock serializes apply, confirm and revert, including a revert started by
-// the timer while someone runs confirm. It returns the unlock function.
-func (s System) lock() (func(), error) {
-	dir := filepath.Join(s.Root, "run/rollgate")
+func (s System) lock() (func(), error) { return Lock(s.Root) }
+
+// Lock serializes apply, confirm, revert and update, including a revert
+// started by the timer while someone runs confirm. It returns the unlock
+// function.
+func Lock(root string) (func(), error) {
+	dir := filepath.Join(root, "run/rollgate")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}

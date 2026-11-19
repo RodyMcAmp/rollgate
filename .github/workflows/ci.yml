@@ -67,6 +67,8 @@ jobs:
         run: make test-apply
       - name: L3 IPv6 test
         run: make test-ipv6
+      - name: L3 update trial test
+        run: make test-trial
       - name: L3 rollback rehearsal
         run: make test-rollback
       - name: Keep serial logs

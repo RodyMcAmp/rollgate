@@ -12,7 +12,7 @@ SHELL_SCRIPTS := image/build.sh tests/vm/boot-test.sh tests/vm/rollback-test.sh 
 	image/rootfs/usr/local/sbin/rollgate-snapshot-rollback \
 	image/rootfs/usr/local/lib/rollgate/boot-report
 
-.PHONY: check golden-update rollgate test-netns image test-vm test-apply test-ipv6 test-rollback clean
+.PHONY: check golden-update rollgate test-netns image test-vm test-apply test-ipv6 test-trial test-rollback clean
 
 ## L0 + L1: shell lint, Go format/vet/lint/tests, and the example config validates.
 ## Run before every commit.
@@ -58,6 +58,11 @@ test-apply:
 ## ISP has none, public IPv6 by prefix delegation once it does (ADR 0008).
 test-ipv6:
 	$(SUDO) LOG_DIR=$(BUILD_DIR)/test-logs bash tests/vm/ipv6-test.sh $(IMAGE)
+
+## L3: rollgate update prepares @next and arms exactly one trial boot of it (ADR 0011).
+## Needs internet access (the Arch Linux Archive).
+test-trial:
+	$(SUDO) LOG_DIR=$(BUILD_DIR)/test-logs bash tests/vm/trial-test.sh $(IMAGE)
 
 ## L3: rollback rehearsal following docs/runbooks/recovery.md.
 test-rollback:
