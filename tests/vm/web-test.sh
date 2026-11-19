@@ -9,7 +9,12 @@
 #      right one gets a Secure, HttpOnly, SameSite=Strict cookie, and the status page
 #      shows the health checks and the release. Port 80 redirects to HTTPS.
 #   4. From WAN, 443 is unreachable (firewall), and the server runs unprivileged.
-#   5. A new password restarts the web UI and ends the old session.
+#   5. router.toml edited in the browser: the check shows the change, Apply makes it
+#      pending, a confirm over a connection opened before the apply is refused, and
+#      one over a new connection keeps it.
+#   6. A change applied in the browser that cuts the browser off (lockout.toml)
+#      reverts by itself, and the web UI comes back.
+#   7. A new password restarts the web UI and ends the old session.
 #
 # Usage:  sudo tests/vm/web-test.sh build/rollgate-<date>.img
 # Env:    LOG_DIR, OVMF_CODE, OVMF_VARS as in boot-test.sh; PORT (default 2250: SSH,
@@ -90,7 +95,7 @@ until vm true 2>/dev/null; do
   kill -0 "$qemu_pid" 2>/dev/null || die "QEMU exited (serial log: $serial)"
   sleep 3
 done
-# Header names arrive in lowercase over HTTP/2 and capitalized over HTTP/1.1.
+# Header names are matched without case, as HTTP defines them.
 shopt -s nocasematch
 # web PATH [curl options]: one HTTPS request from the LAN; prints the headers and body.
 web() { local path=$1; shift; curl -sk -m 15 -D - -b "$work/cookies" -c "$work/cookies" "$@" "https://127.0.0.1:$https_port$path"; }
@@ -137,7 +142,82 @@ user=$(vm 'ps -o user= -o args= -C rollgate' | awk '$3 == "web" { print $1 }')
 [[ -n $user && $user != root ]] || die "rollgate web runs as '${user:-nothing}', want an unprivileged user"
 log "  unreachable from WAN; runs as $user"
 
-log "5. a new password ends the old session"
+# field NAME: the value of the hidden form field NAME on the page in $out.
+field() { sed -n "s/.*name=\"$1\" value=\"\([^\"]*\)\".*/\1/p" <<<"$out" | head -n 1; }
+# check_config FILE: check FILE in the settings editor; sets csrf, base and checked.
+check_config() {
+  out=$(web /settings)
+  csrf=$(field csrf) base=$(field base)
+  [[ -n $csrf && -n $base ]] || die "the settings page has no form: $out"
+  out=$(web /settings --data-urlencode "csrf=$csrf" --data-urlencode "base=$base" \
+    --data-urlencode "config@$1" -d action=check)
+  checked=$(field checked)
+  [[ -n $checked && $out == *'value="apply"'* ]] || die "checking $1 offers no Apply: $out"
+}
+apply_config() {
+  web /settings --data-urlencode "csrf=$csrf" --data-urlencode "base=$(field base)" \
+    --data-urlencode "checked=$checked" --data-urlencode "config@$1" -d action=apply
+}
+
+log "5. edit router.toml in the browser: check, apply, confirm from a new connection"
+vm 'cat /etc/rollgate/router.toml' > "$work/edited.toml"
+echo "# changed in the browser" >> "$work/edited.toml"
+check_config "$work/edited.toml"
+[[ $out == *"+# changed in the browser"* || $out == *"&#43;# changed in the browser"* ]] || die "the check doesn't show the change: $out"
+[[ $out == HTTP/1.1* ]] || die "want HTTP/1.1 (each request on its own connection): $out"
+# A connection opened before the apply sends its headers now and its body after
+# the apply: its confirm must be refused, because it doesn't prove that the
+# router still accepts new connections.
+session=$(awk '$6 == "rollgate_session" { print $7 }' "$work/cookies")
+body="csrf=$(printf %s "$csrf" | sed 's/=/%3D/g')"
+mkfifo "$work/old.in"
+openssl s_client -quiet -connect "127.0.0.1:$https_port" <"$work/old.in" >"$work/old.out" 2>/dev/null &
+exec 3>"$work/old.in"
+printf 'POST /confirm HTTP/1.1\r\nHost: 127.0.0.1\r\nCookie: rollgate_session=%s\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: %d\r\n\r\n' \
+  "$session" "${#body}" >&3
+sleep 2
+out=$(apply_config "$work/edited.toml")
+[[ $out == *" 303"* && $out == *"Location: /confirm"* && $out == *"Connection: close"* ]] || die "apply: $out"
+grep -q "Waiting for confirmation: generation 2" <<<"$(vm 'rollgate status')" || die "no generation 2 waiting after the apply: $(vm 'rollgate status')"
+printf '%s' "$body" >&3
+for _ in $(seq 20); do grep -q "^HTTP/1.1" "$work/old.out" && break; sleep 0.5; done
+exec 3>&-
+grep -q "^HTTP/1.1 409" "$work/old.out" || die "a confirm over a connection opened before the apply wasn't refused: $(head -c 2000 "$work/old.out")"
+grep -q "Waiting for confirmation: generation 2" <<<"$(vm 'rollgate status')" || die "the refused confirm confirmed something"
+log "  apply went through; a confirm over a connection opened before it was refused"
+out=$(web /confirm)
+[[ $out == *"Keep these settings"* ]] || die "the confirm page: $out"
+out=$(web /confirm --data-urlencode "csrf=$csrf")
+[[ $out == *" 200"* && $out == *"The new settings are kept"* ]] || die "confirm: $out"
+grep -q "Running: generation 2, confirmed" <<<"$(vm 'rollgate status')" || die "generation 2 isn't confirmed: $(vm 'rollgate status')"
+vm 'grep -q "^# changed in the browser" /etc/rollgate/router.toml' || die "router.toml doesn't have the browser's edit"
+log "  confirmed from a new connection; router.toml has the edit"
+
+log "6. a change that cuts off the web UI reverts by itself"
+check_config "$here/apply/lockout.toml"
+out=$(apply_config "$here/apply/lockout.toml")
+[[ $out == *" 303"* ]] || die "applying the lockout: $out"
+start=$SECONDS
+if curl -sk -m 5 -o /dev/null "https://127.0.0.1:$https_port/login"; then
+  die "a new connection to the web UI still worked after the lockout was applied"
+fi
+log "  new connections to the web UI are refused"
+until curl -sk -m 5 -o /dev/null "https://127.0.0.1:$https_port/login"; do
+  ((SECONDS - start < 120)) || die "the web UI didn't come back within 120 s of a 30 s confirm timeout"
+  sleep 2
+done
+log "  the web UI came back by itself after $((SECONDS - start)) s"
+until vm true 2>/dev/null; do ((SECONDS - start < 180)) || die "no SSH after the revert"; sleep 2; done
+status=$(vm 'rollgate status')
+if ! grep -q "Running: generation 2, confirmed" <<<"$status" || ! grep -Eq "^ +3  reverted" <<<"$status"; then
+  die "after the revert: $status"
+fi
+out=$(web /login --data-urlencode "password=$password")
+out=$(web /)
+[[ $out == *" 200"* && $out == *"all checks pass"* ]] || die "the status page after the revert: $out"
+log "  generation 3 reverted, generation 2 runs; logged in again"
+
+log "7. a new password ends the old session"
 vm "echo 'another long password' | rollgate web-password --stdin" >/dev/null || die "changing the password failed"
 out=$(web /)
 [[ $out == *" 303"* && $out == *"Location: /login"* ]] || die "the old session still works after a new password: $out"

@@ -1,0 +1,24 @@
+{{template "top" .}}
+{{with .Pending}}
+<section>
+<h2>Keep the new settings?</h2>
+<p>The router now runs generation {{.Generation}}. This page reached the router after the change, so the change didn't cut you off.</p>
+{{if $.Left}}<p id="countdown">If you do nothing, the previous settings come back by themselves in about <strong id="left">{{$.Left}}</strong> seconds.</p>
+{{else}}<p>Its time is up: the previous settings should come back any moment. If they don't, press <strong>Undo now</strong>, or restart the router.</p>{{end}}
+<form method="post" action="/confirm" class="inline">
+<input type="hidden" name="csrf" value="{{$.CSRF}}">
+<button type="submit">Keep these settings</button>
+</form>
+<form method="post" action="/revert" class="inline">
+<input type="hidden" name="csrf" value="{{$.CSRF}}">
+<button type="submit" class="secondary">Undo now</button>
+</form>
+</section>
+<script src="/countdown.js" defer></script>
+{{else}}
+<section>
+<h2>Nothing is waiting to be kept</h2>
+<p>No settings change is waiting for you. If you applied one and didn't keep it in time, the previous settings came back by themselves: <a href="/">Status</a> shows what the router runs.</p>
+</section>
+{{end}}
+{{template "bottom" .}}

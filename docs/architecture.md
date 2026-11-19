@@ -94,7 +94,8 @@ Changes that cannot affect reachability (a DNS blocklist, for example) still use
 The web UI (M6) changes nothing itself. It asks `rollgate api`, which runs as root and calls the same code as the CLI:
 
 - **Where:** HTTP on the Unix socket `/run/rollgate/api.sock`, opened by `rollgate-api.socket`. The socket is `root:rollgate-api`, mode 0660, so the kernel lets only root and the `rollgate-api` group (the web server) connect.
-- **What it accepts:** a fixed list of requests (`compiler/api`). `GET /v1/status`, `/v1/health` and `/v1/config` read. `POST /v1/validate`, `diff`, `apply`, `confirm`, `revert`, `update` and `rollback` change things, one at a time. There is no request that runs a command.
+- **What it accepts:** a fixed list of requests (`compiler/api`). `GET /v1/status`, `/v1/health`, `/v1/config` and `/v1/pending` (the change waiting for confirmation and when it reverts) read. `POST /v1/validate`, `diff`, `apply`, `confirm`, `revert`, `update` and `rollback` change things, one at a time. There is no request that runs a command.
+- **Update and rollback** reboot by themselves when they need to, since the browser has no shell to type `reboot` in. (`rollgate rollback` at the CLI still leaves the reboot to the user.)
 - **Commit-confirm:** `apply` and `confirm` carry the client's connection (the browser's address and port). An apply from one connection can't be confirmed from the same one, as with SSH.
 - **Applying:** `apply` takes the whole `router.toml`. A config that doesn't validate is refused before anything changes. Otherwise it becomes `/etc/rollgate/router.toml`, like an edit from the CLI, and is applied.
 - **Logging:** every request is logged in the journal with the asking process (`journalctl -u rollgate-api`).
@@ -117,8 +118,11 @@ The web UI (M6) changes nothing itself. It asks `rollgate api`, which runs as ro
 - **No privileges:** it runs as a throwaway user (`DynamicUser=`) with no capabilities, a read-only system and systemd's other sandbox settings. The certificate, key and password hash reach it as systemd credentials. The only extra right it has is membership of `rollgate-api`, to ask the API.
 - **Logging in:** one password, checked against the stored hash. Five wrong passwords from one address block that address for 15 minutes. A session is a random token in a cookie (`Secure`, `HttpOnly`, `SameSite=Strict`) that ends after 30 idle minutes, at logout, or when the password changes.
 - **Forms:** every form that changes something carries the session's CSRF token.
-- **Pages** come from the binary itself (`embed`), with a Content Security Policy that allows nothing from outside the router, and no JavaScript.
-- **What it shows so far:** a status page, with the health checks and `rollgate status` from the API. Changing settings in the browser comes next *(planned)*.
+- **Pages** come from the binary itself (`embed`), with a Content Security Policy that allows nothing from outside the router. Every page works without JavaScript; the one script, the confirm page's countdown, is served by the router too.
+- **Status:** the health checks and `rollgate status` from the API. Every page says when a change is waiting to be kept.
+- **Settings:** `router.toml` in a text editor, so the user's comments stay. **Check** validates it and shows the changes to `router.toml` and to the system files; **Apply** is offered only after a check passes. An apply is refused, and the check shown again, if the text was edited after the check or `router.toml` changed on the router since (over SSH, or from another browser).
+- **Commit-confirm in the browser (ADR 0010, ADR 0014):** after an apply, the confirm page counts down and offers **Keep these settings** and **Undo now**. The server speaks HTTP/1.1 only and opens a connection for every request (no keep-alive, no HTTP/2), so each click arrives over a new connection. On top of that, a confirm is refused unless its connection was opened after the apply finished, because an older connection can outlive a change that blocks new ones. The API also refuses a confirm from the apply's own connection. If the change cuts the browser off, nothing can confirm, and the revert timer brings the old settings back.
+- **Updates:** buttons for `rollgate update` and `rollgate rollback`, with what each does spelled out first. Both may restart the router.
 
 ## Updates and rollback
 

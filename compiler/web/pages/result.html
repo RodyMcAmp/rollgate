@@ -1,0 +1,7 @@
+{{template "top" .}}
+<section>
+{{with .Done}}<h2 class="ok">Done</h2><p>{{.}}</p>{{else}}<h2 class="bad">That didn't work</h2>{{end}}
+{{with .Output}}<pre>{{.}}</pre>{{end}}
+<p><a href="/">Back to Status</a></p>
+</section>
+{{template "bottom" .}}

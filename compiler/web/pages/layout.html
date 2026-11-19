@@ -1,0 +1,27 @@
+{{define "top"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>rollgate: {{.Title}}</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+<h1>rollgate</h1>
+<nav><a href="/">Status</a> <a href="/settings">Settings</a> <a href="/updates">Updates</a></nav>
+<form method="post" action="/logout">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<button type="submit" class="link">Log out</button>
+</form>
+</header>
+<main>
+{{with .Pending}}<p class="banner" role="status">A settings change (generation {{.Generation}}) is waiting for you to keep it{{if $.Left}}; otherwise it is undone by itself in about {{$.Left}} seconds{{end}}. <a href="/confirm">Keep or undo it</a></p>{{end}}
+{{with .Error}}<p class="error" role="alert">{{.}}</p>{{end}}
+{{with .Notice}}<p class="notice" role="status">{{.}}</p>{{end}}
+{{end}}
+
+{{define "bottom"}}</main>
+</body>
+</html>
+{{end}}

@@ -19,3 +19,12 @@ button.link { margin: 0; padding: 0; background: none; color: var(--accent); }
 .ok { color: var(--ok); font-weight: normal; }
 .bad, .error { color: var(--bad); font-weight: normal; }
 .hint { font-size: 0.9rem; opacity: 0.8; }
+nav { display: flex; gap: 1rem; margin-right: auto; margin-left: 1.5rem; }
+a { color: var(--accent); }
+textarea { width: 100%; padding: 0.5rem; font: 0.85rem/1.4 ui-monospace, monospace; border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--fg); tab-size: 4; }
+button.secondary { background: none; color: var(--accent); border: 1px solid var(--accent); }
+.banner, .notice { padding: 0.5rem 1rem; border-radius: 6px; border: 1px solid var(--accent); background: var(--card); }
+.diff { font-family: ui-monospace, monospace; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+details { margin-bottom: 0.75rem; }
+form.inline { display: inline-block; margin-right: 0.75rem; }

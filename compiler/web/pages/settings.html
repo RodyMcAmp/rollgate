@@ -1,0 +1,37 @@
+{{template "top" .}}
+<form method="post" action="/settings">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<input type="hidden" name="base" value="{{.Base}}">
+<input type="hidden" name="checked" value="{{.Checked}}">
+<section>
+<h2>router.toml</h2>
+<p class="hint">All of the router's settings are in this file. Edit it here, then press <strong>Check</strong> to see what would change. Nothing changes until you press <strong>Apply</strong>.
+The file's format is described in the <a href="https://github.com/RodyMcAmp/rollgate/blob/main/docs/config-spec.md" rel="noreferrer">config reference</a>.</p>
+<label for="config" class="sr-only">router.toml</label>
+<textarea id="config" name="config" rows="28" spellcheck="false" autocapitalize="off" autocomplete="off">
+{{.Config}}</textarea>
+<button type="submit" name="action" value="check">Check</button>
+</section>
+{{with .Output}}<section><h2>What the check found</h2><pre>{{.}}</pre></section>{{end}}
+{{if .Valid}}
+<section>
+<h2>Your changes</h2>
+{{with .Changes}}<pre class="diff">{{.}}</pre>{{else}}<p>Your text is the same as router.toml on the router.</p>{{end}}
+<details>
+<summary>What changes in the router's system files</summary>
+<pre class="diff">{{.Files}}</pre>
+</details>
+</section>
+{{if .Pending}}
+<p class="notice">A change is waiting for you to keep or undo it. <a href="/confirm">Do that first</a>, then apply this one.</p>
+{{else}}
+<section>
+<h2>Apply</h2>
+<p>Applying makes your text the router's router.toml and switches the router to it. Then you have a short time to press <strong>Keep these settings</strong> on the next page.</p>
+<p>If the change cuts this computer off from the router, you won't be able to press it: wait, and the previous settings come back by themselves.</p>
+<button type="submit" name="action" value="apply">Apply</button>
+</section>
+{{end}}
+{{end}}
+</form>
+{{template "bottom" .}}

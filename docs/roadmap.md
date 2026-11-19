@@ -65,7 +65,7 @@ Architecture, config spec draft, ADRs 0001–0008, the agent and contributor pro
 ## M6 — Usability
 
 - Web UI (Go + htmx, management zones only) that edits `router.toml` through the same apply path (ADR 0014).
-  Steps: 1. the root API (`rollgate api`); 2. `rollgate web-password` and the HTTPS certificate; 3. the web server with login and a status page; 4. editing `router.toml` with apply and confirm, and update and rollback buttons *(planned)*.
+  Steps: 1. the root API (`rollgate api`); 2. `rollgate web-password` and the HTTPS certificate; 3. the web server with login and a status page; 4. editing `router.toml` with apply and confirm, and update and rollback buttons. Next: forms for common tasks *(planned)*.
 - WireGuard road-warrior VPN, DNS blocklists, a status dashboard that explains the IPv6 state in plain words.
 
 ## Later / ideas

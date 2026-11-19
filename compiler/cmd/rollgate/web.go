@@ -154,9 +154,15 @@ func webCmd(args []string, stderr io.Writer) int {
 	srv := &web.Server{API: api.NewClient(*apiSocket), PasswordHash: strings.TrimSpace(string(hash))}
 	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}}
 	errs := make(chan error, len(httpsLs)+len(httpLs))
+	// HTTP/1.1 only, and one request per connection: every request comes
+	// over a connection opened for it, so a confirm after an apply is always
+	// a new connection (ADR 0014). HTTP/2 would carry every request over one.
+	var protocols http.Protocols
+	protocols.SetHTTP1(true)
 	for _, l := range httpsLs {
 		s := &http.Server{Handler: srv.Handler(), TLSConfig: tlsConfig, ErrorLog: log.Default(),
-			ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 2 * time.Minute}
+			Protocols: &protocols, ConnContext: srv.ConnContext, ReadHeaderTimeout: 10 * time.Second}
+		s.SetKeepAlivesEnabled(false)
 		go func() { errs <- s.ServeTLS(l, "", "") }()
 		log.Printf("rollgate web: HTTPS on %s", l.Addr())
 	}

@@ -14,9 +14,19 @@ import (
 	"github.com/RodyMcAmp/rollgate/compiler/api"
 )
 
-type fakeAPI struct{ down bool }
+// fakeAPI is the router: it keeps router.toml and the pending change, and
+// records the changes it was asked for.
+type fakeAPI struct {
+	down     bool
+	config   string       // router.toml
+	pending  *api.Pending // the change waiting for confirmation
+	deadline time.Time    // an apply's revert deadline
+	invalid  bool         // diff refuses every config
+	posts    []string     // "path connection" for each change asked
+	applied  string       // the last config applied
+}
 
-func (f fakeAPI) Get(_ context.Context, path string) (api.Response, error) {
+func (f *fakeAPI) Get(_ context.Context, path string) (api.Response, error) {
 	if f.down {
 		return api.Response{}, errors.New("the router's API didn't answer")
 	}
@@ -25,12 +35,41 @@ func (f fakeAPI) Get(_ context.Context, path string) (api.Response, error) {
 		return api.Response{OK: true, Output: "ok    20-wan         wan (wan) has 10.0.3.15/24\n"}, nil
 	case "/v1/status":
 		return api.Response{OK: true, Output: "Release: 2026-11-16.\n<script>alert(1)</script>\n"}, nil
+	case "/v1/config":
+		return api.Response{OK: true, Config: f.config}, nil
+	case "/v1/pending":
+		return api.Response{OK: true, Pending: f.pending}, nil
 	}
 	return api.Response{}, errors.New("unexpected " + path)
 }
 
-func (fakeAPI) Post(context.Context, string, api.Request) (api.Response, error) {
-	return api.Response{}, errors.New("no changes in this test")
+func (f *fakeAPI) Post(_ context.Context, path string, req api.Request) (api.Response, error) {
+	if f.down {
+		return api.Response{}, errors.New("the router's API didn't answer")
+	}
+	f.posts = append(f.posts, strings.TrimSpace(path+" "+req.Connection))
+	switch path {
+	case "/v1/diff":
+		if f.invalid {
+			return api.Response{Error: "invalid config", Output: "router.toml:2: unknown key \"wan_typo\"\n"}, nil
+		}
+		return api.Response{OK: true, Output: "changed: /etc/nftables.conf\n1 file(s) would change\n"}, nil
+	case "/v1/apply":
+		f.config, f.applied = req.Config, req.Config
+		f.pending = &api.Pending{Generation: 3, Deadline: f.deadline}
+		return api.Response{OK: true, Output: "Applied generation 3.\n"}, nil
+	case "/v1/confirm", "/v1/revert":
+		if f.pending == nil {
+			return api.Response{Error: "nothing is waiting for confirmation"}, nil
+		}
+		f.pending = nil
+		return api.Response{OK: true}, nil
+	case "/v1/update":
+		return api.Response{OK: true, Output: "Already on the newest release, 2026-11-16.\n"}, nil
+	case "/v1/rollback":
+		return api.Response{Error: "there is no previous system to go back to"}, nil
+	}
+	return api.Response{}, errors.New("unexpected " + path)
 }
 
 const testPassword = "correct horse battery"
@@ -41,7 +80,7 @@ func newServer(t *testing.T, now *time.Time) (*Server, http.Handler) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := &Server{API: fakeAPI{}, PasswordHash: h, Now: func() time.Time { return *now }}
+	s := &Server{API: &fakeAPI{}, PasswordHash: h, Now: func() time.Time { return *now }}
 	return s, s.Handler()
 }
 
@@ -163,7 +202,7 @@ func TestAPIDown(t *testing.T) {
 	now := time.Now()
 	s, h := newServer(t, &now)
 	c := login(t, h)
-	s.API = fakeAPI{down: true}
+	s.API = &fakeAPI{down: true}
 	if w := do(h, "GET", "/", nil, c); w.Code != 200 || !strings.Contains(w.Body.String(), "API didn&#39;t answer") {
 		t.Errorf("status page with the API down: %d\n%s", w.Code, w.Body)
 	}
