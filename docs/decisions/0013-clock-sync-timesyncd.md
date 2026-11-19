@@ -1,6 +1,6 @@
 # 0013. The router keeps its clock right with systemd-timesyncd
 
-- Status: Accepted
+- Status: Accepted, amended by 0015 (time servers by IP address as a fallback)
 - Date: 2026-11-19
 
 ## Context

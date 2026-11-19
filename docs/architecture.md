@@ -201,6 +201,7 @@ On a board without one, `rollgate-softdog.service` loads the kernel's software w
 Updates check signatures and download over HTTPS, and Unbound checks DNSSEC for the LAN; all of that needs the right time.
 `systemd-timesyncd` keeps the clock right (ADR 0013), with Arch's default servers (`arch.pool.ntp.org`). The `rollgate` package enables it, so routers that update get it too.
 The router resolves names for itself through systemd-resolved, without DNSSEC, so finding the time servers works even when the clock is badly wrong (for example after a dead CMOS battery).
+Cloudflare's time service by IP address, `162.159.200.1` and `162.159.200.123`, comes right after the first pool name, so the clock gets set even when names can't be looked up. At boot that's often the server timesyncd ends up with, since its first lookup can come before the network is up (ADR 0015; `/usr/lib/systemd/timesyncd.conf.d/10-rollgate.conf`, from the `rollgate` package).
 There's no health check for it: an unreachable time server mustn't roll back an update. `rollgate status` shows whether the clock is synchronized, and a failed `rollgate update` says so when it isn't.
 
 ### Kernels

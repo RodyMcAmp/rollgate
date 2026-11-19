@@ -71,6 +71,8 @@ jobs:
         run: make test-trial
       - name: L3 rollback rehearsal
         run: make test-rollback
+      - name: L3 clock test
+        run: make test-clock
       - name: L3 VMware test
         run: make test-vmware
       - name: L3 API test
