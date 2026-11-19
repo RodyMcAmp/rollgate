@@ -14,6 +14,7 @@ SUDO := $(if $(filter 0,$(shell id -u)),,sudo)
 SHELL_SCRIPTS := image/build.sh tests/vm/boot-test.sh tests/vm/rollback-test.sh \
 	tests/vm/apply-test.sh tests/vm/ipv6-test.sh tests/vm/trial-test.sh \
 	tests/vm/update-test.sh tests/netns/run.sh release/publish.sh release/dry-run.sh \
+	release/bump.sh \
 	image/rootfs/usr/local/sbin/rollgate-snapshot-rollback \
 	image/rootfs/usr/local/lib/rollgate/boot-report
 

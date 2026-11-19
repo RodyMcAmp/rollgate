@@ -1,0 +1,69 @@
+# The weekly date bump (docs/build-and-release.md, "Release train", step 1): every
+# Monday, open a pull request that moves image/snapshot-date to the newest Arch Linux
+# Archive date, listing what changed. CI tests it; merging it makes it a release.
+#
+# Pull requests opened with the workflow's own token don't start CI (GitHub's rule
+# against workflows triggering workflows). With the ROLLGATE_BOT_TOKEN secret (a
+# fine-grained token with contents and pull-requests write access to this repository)
+# they do. Without it, close and reopen the pull request to start CI.
+name: bump
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "Archive date (YYYY-MM-DD); empty for yesterday"
+        required: false
+  # A pull request that changes the bump runs it as a smoke test: it bumps the date in
+  # its own checkout and shows the description, without opening a pull request.
+  pull_request:
+    paths: [.github/workflows/bump.yml, release/bump.sh]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bump:
+    name: Weekly date bump
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    env:
+      GH_TOKEN: ${{ secrets.ROLLGATE_BOT_TOKEN || github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Install tools
+        run: pacman -Syu --noconfirm --needed git github-cli
+      - uses: actions/checkout@v5
+        with:
+          token: ${{ secrets.ROLLGATE_BOT_TOKEN || github.token }}
+      - name: Bump the date
+        id: bump
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          mkdir -p build
+          status=0
+          bash release/bump.sh "${{ inputs.date }}" build/bump-body.md || status=$?
+          case $status in
+            0) echo "date=$(cat image/snapshot-date)" >> "$GITHUB_OUTPUT"; cat build/bump-body.md ;;
+            3) echo "::notice::Nothing newer to bump to."; echo "date=" >> "$GITHUB_OUTPUT" ;;
+            *) exit "$status" ;;
+          esac
+      - name: Open the pull request
+        if: steps.bump.outputs.date != '' && github.event_name != 'pull_request'
+        run: |
+          date=${{ steps.bump.outputs.date }}
+          branch=bump/$date
+          if gh pr list --head "$branch" --state open --json number --jq '.[0].number' | grep -q .; then
+            echo "::notice::A pull request for $date is already open."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git commit -q -am "image: snapshot date $date"
+          git push origin "$branch"
+          gh pr create --base main --head "$branch" --title "image: snapshot date $date (weekly bump)" \
+            --body-file build/bump-body.md

@@ -29,8 +29,9 @@ Pinning the date gives you:
 
 ## Release train
 
-1. **Weekly bump** (automated PR, opened by a bot or an agent): change `image/snapshot-date` to the latest available date.
-   The PR description lists notable package changes (kernel, systemd, nftables, dnsmasq, Unbound, openssh) from the archive's package lists.
+1. **Weekly bump** (`.github/workflows/bump.yml`, every Monday, or by hand): `release/bump.sh` changes `image/snapshot-date` to the newest archive date (yesterday, UTC) and opens a pull request.
+   Its description lists which of the image's packages changed, kernel, systemd, glibc, nftables, dnsmasq, Unbound and openssh first, from the archive's package lists.
+   Pull requests opened with the workflow's own token don't start CI (a GitHub rule). With the `ROLLGATE_BOT_TOKEN` secret, a fine-grained token with contents and pull-requests write access to this repository, they do; without it, close and reopen the pull request to start CI.
 2. **CI** runs L0–L4 ([testing.md](testing.md)). L4 installs the **previous** release, updates to the new date, and verifies a forced rollback.
 3. **Merge = release.** CI tags `release/2026.11.15` and publishes:
    - the disk image and installer ISO, with checksums,

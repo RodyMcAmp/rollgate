@@ -67,7 +67,7 @@ M3 (safe apply). Anything marked
 | `tests/golden/` | L1 golden tests: each `<case>/router.toml` and the exact files it must compile to. |
 | `tests/netns/` | L2 namespace test: `run.sh`, its `router.toml`, a TCP listener and a DHCP/DNS probe. |
 | `compiler/` | Go source for the `rollgate` CLI: `validate`, `compile` (networkd, sysctl, nftables, dnsmasq, Unbound, sshd, IPv6 auto), `diff`, `schema`, `apply`, `confirm`, `revert`, `status` and `rollback-config` (ADR 0010, code in `compiler/apply/`), and `health` and `check` (`compiler/health/`), and `update` (ADR 0011, `compiler/update/`: prepares `@next` and arms its trial boot; `health -boot` promotes or fails the trial; `rollback`) work. The image ships it as `/usr/bin/rollgate`, with `rollgate-boot.service`. Templates are in `compiler/templates/`. |
-| `release/` | The release train (ADR 0012): `publish.sh` adds a release to the published site, `dry-run.sh` rehearses it with a throwaway key. `.github/workflows/release.yml` runs it after CI passes on `main`; `compiler/cmd/rollgate-release` maintains `releases.json`. |
+| `release/` | The release train (ADR 0012): `publish.sh` adds a release to the published site, `dry-run.sh` rehearses it with a throwaway key, and `bump.sh` makes the weekly date bump (`.github/workflows/bump.yml`). `.github/workflows/release.yml` runs it after CI passes on `main`; `compiler/cmd/rollgate-release` maintains `releases.json`. |
 | `packaging/` *(planned)* | PKGBUILDs for our own packages (e.g. `rollgate` itself). |
 
 ## Commands
