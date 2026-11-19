@@ -311,6 +311,10 @@ func (s System) run(name string, args ...string) error {
 
 type mount struct{ device, subvol, uuid string }
 
+// errNotBtrfs means / isn't a Btrfs subvolume: for example a read-only
+// snapshot booted from GRUB's snapshot menu, which runs on an overlay.
+var errNotBtrfs = errors.New("/ is not a Btrfs subvolume")
+
 // rootMount finds the Btrfs device, subvolume and filesystem UUID of /.
 func rootMount(s System) (mount, error) {
 	out, err := s.Run.Run("findmnt", "-n", "-r", "-o", "SOURCE,FSROOT,UUID,FSTYPE", "/")
@@ -319,7 +323,7 @@ func rootMount(s System) (mount, error) {
 	}
 	f := strings.Fields(string(out))
 	if len(f) != 4 || f[3] != "btrfs" {
-		return mount{}, fmt.Errorf("/ is not a Btrfs subvolume (findmnt: %q)", strings.TrimSpace(string(out)))
+		return mount{}, fmt.Errorf("%w (findmnt: %q)", errNotBtrfs, strings.TrimSpace(string(out)))
 	}
 	device, _, _ := strings.Cut(f[0], "[") // "/dev/sda2[/@]"
 	return mount{device: device, subvol: f[1], uuid: f[2]}, nil

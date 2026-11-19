@@ -33,6 +33,10 @@ func Boot(s System, check Health) ([]health.Result, error) {
 		return nil, err
 	}
 	m, err := rootMount(s)
+	if errors.Is(err, errNotBtrfs) {
+		// A snapshot booted for recovery: no update to finish here.
+		return check()
+	}
 	if err != nil {
 		return nil, err
 	}

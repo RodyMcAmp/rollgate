@@ -180,6 +180,7 @@ func TestBootFinishesPromotion(t *testing.T) {
 func TestBootNothingToDo(t *testing.T) {
 	for _, tc := range []struct{ subvol, state string }{
 		{"/@", Promoted}, {"/@", Failed}, {"/@", ""}, {"/@next", Promoted}, {"/@previous", Trial},
+		{"overlay", Trial}, // a read-only snapshot booted for recovery (make test-rollback)
 	} {
 		f := newTrialFake(t, tc.subvol, tc.state)
 		var called bool

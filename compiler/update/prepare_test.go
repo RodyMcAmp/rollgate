@@ -77,6 +77,9 @@ func (f *fakeSystem) Run(name string, args ...string) ([]byte, error) {
 	f.cmds = append(f.cmds, cmd)
 	switch {
 	case name == "findmnt":
+		if f.subvol == "overlay" { // a snapshot booted from GRUB's snapshot menu
+			return []byte("overlay / - overlay\n"), nil
+		}
 		return []byte(fmt.Sprintf("/dev/vda2[%s] %s %s btrfs\n", f.subvol, f.subvol, testUUID)), nil
 	case name == "btrfs" && args[1] == "snapshot":
 		return nil, os.CopyFS(args[3], os.DirFS(args[2]))
