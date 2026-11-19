@@ -72,6 +72,13 @@ func apiBackend() api.Backend {
 			return err
 		},
 		Config: func() ([]byte, error) { return os.ReadFile(config.DefaultPath) },
+		Pending: func() (*api.Pending, error) {
+			p, ok, err := apply.PendingChange(sys(io.Discard, ""))
+			if err != nil || !ok {
+				return nil, err
+			}
+			return &api.Pending{Generation: p.Generation, Deadline: p.Deadline}, nil
+		},
 		Validate: func(source []byte, w io.Writer) error {
 			if _, ok := parse(source, "router.toml", w); !ok {
 				return errors.New("invalid config")
@@ -99,10 +106,25 @@ func apiBackend() api.Backend {
 			}
 			return applyFile(sys(w, connection), config.DefaultPath, w)
 		},
-		Confirm:  func(connection string, w io.Writer) error { return apply.Confirm(sys(w, connection)) },
-		Revert:   func(w io.Writer) error { return apply.Revert(sys(w, ""), apply.ByHand) },
-		Update:   func(date string, w io.Writer) error { return updateRouter(sys(w, ""), date) },
-		Rollback: func(w io.Writer) error { return update.Rollback(updateSystem(sys(w, ""))) },
+		Confirm: func(connection string, w io.Writer) error { return apply.Confirm(sys(w, connection)) },
+		Revert:  func(w io.Writer) error { return apply.Revert(sys(w, ""), apply.ByHand) },
+		Update:  func(date string, w io.Writer) error { return updateRouter(sys(w, ""), date) },
+		// Like update, a rollback from the web UI reboots by itself: there is
+		// no shell to type reboot in.
+		Rollback: func(w io.Writer) error {
+			u := updateSystem(sys(w, ""))
+			if err := update.Rollback(u); err != nil {
+				return err
+			}
+			if !update.RebootPending(u) {
+				return nil
+			}
+			fmt.Fprintln(w, "Rebooting now.")
+			if out, err := u.Run.Run("systemctl", "reboot"); err != nil {
+				return fmt.Errorf("the rollback is done, but rebooting failed (%v: %s); reboot to start it", err, out)
+			}
+			return nil
+		},
 	}
 }
 
