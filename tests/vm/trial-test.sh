@@ -71,7 +71,8 @@ mkdir -p "$work/root" "$work/www" "$log_dir"
 # Keepalives end a session whose VM rebooted under it, instead of waiting forever.
 vm() {
   ssh -i "$work/key" -p "$ssh_port" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-    -o LogLevel=ERROR -o ConnectTimeout=5 -o ServerAliveInterval=5 -o ServerAliveCountMax=3 \n    -o BatchMode=yes root@127.0.0.1 "$@"
+    -o LogLevel=ERROR -o ConnectTimeout=5 -o ServerAliveInterval=5 -o ServerAliveCountMax=3 \
+    -o BatchMode=yes root@127.0.0.1 "$@"
 }
 
 # wait_for_boot <n>: waits for the n-th boot report and for SSH, then checks the report
