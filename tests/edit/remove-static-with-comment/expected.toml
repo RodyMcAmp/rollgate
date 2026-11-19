@@ -1,0 +1,14 @@
+schema_version = 1
+
+[dhcp.lan]
+range = ["192.168.10.100", "192.168.10.199"]
+
+[[dhcp.lan.static]]
+hostname = "nas"
+mac = "00:00:5e:00:53:10"
+ipv4 = "192.168.10.5"
+
+[[dhcp.lan.static]]
+hostname = "tv"
+mac = "00:00:5e:00:53:12"
+ipv4 = "192.168.10.7"   # living room

@@ -1,0 +1,17 @@
+schema_version = 1
+
+[dhcp.lan]
+range = ["192.168.10.100", "192.168.10.199"]
+
+[dhcp.iot]
+range = ["192.168.20.100", "192.168.20.199"]
+lease_time = "4h"
+# More IoT settings will go here.
+
+[[dhcp.iot.static]]
+hostname = "thermostat"
+mac = "00:00:5e:00:53:20"
+ipv4 = "192.168.20.10"
+
+[dns]
+mode = "recursive"

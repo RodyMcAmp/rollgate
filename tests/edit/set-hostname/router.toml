@@ -1,0 +1,9 @@
+# My router.
+schema_version = 1
+
+[system]
+hostname = "gateway"   # shows up as gateway.home.arpa
+timezone = "UTC"
+
+[management]
+allowed_zones = ["lan"]

@@ -1,0 +1,12 @@
+schema_version = 1
+
+[dhcp.lan]
+range = ["192.168.10.100", "192.168.10.199"]
+
+[dhcp.iot]
+range = ["192.168.20.100", "192.168.20.199"]
+lease_time = "4h"
+# More IoT settings will go here.
+
+[dns]
+mode = "recursive"
