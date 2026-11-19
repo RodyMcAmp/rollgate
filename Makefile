@@ -5,14 +5,20 @@ SHELL := /bin/bash
 BUILD_DIR ?= build
 SNAPSHOT_DATE := $(shell tr -d '[:space:]' < image/snapshot-date)
 IMAGE := $(BUILD_DIR)/rollgate-$(SNAPSHOT_DATE).img
+# The L4 update test's "previous release": a week before the candidate, until the
+# release train publishes real releases (M4 step 7).
+PREVIOUS_DATE := $(shell date -u -d "$(SNAPSHOT_DATE) -7 days" +%F)
+PREVIOUS_IMAGE := $(BUILD_DIR)/rollgate-$(PREVIOUS_DATE).img
 SUDO := $(if $(filter 0,$(shell id -u)),,sudo)
 
 SHELL_SCRIPTS := image/build.sh tests/vm/boot-test.sh tests/vm/rollback-test.sh \
-	tests/vm/apply-test.sh tests/vm/ipv6-test.sh tests/netns/run.sh \
+	tests/vm/apply-test.sh tests/vm/ipv6-test.sh tests/vm/trial-test.sh \
+	tests/vm/update-test.sh tests/netns/run.sh \
 	image/rootfs/usr/local/sbin/rollgate-snapshot-rollback \
 	image/rootfs/usr/local/lib/rollgate/boot-report
 
-.PHONY: check golden-update rollgate test-netns image test-vm test-apply test-ipv6 test-trial test-rollback clean
+.PHONY: check golden-update rollgate test-netns image image-previous test-vm test-apply \
+	test-ipv6 test-trial test-rollback test-update clean
 
 ## L0 + L1: shell lint, Go format/vet/lint/tests, and the example config validates.
 ## Run before every commit.
@@ -44,6 +50,17 @@ test-netns: rollgate
 ## Build the disk image at the date in image/snapshot-date.
 image: rollgate
 	$(SUDO) BUILD_DIR=$(BUILD_DIR) ROLLGATE=$(abspath $(BUILD_DIR)/rollgate) bash image/build.sh
+
+## Build the L4 update test's "previous release" image, a week before image/snapshot-date.
+image-previous: rollgate
+	$(SUDO) BUILD_DIR=$(BUILD_DIR) IMAGE_DATE=$(PREVIOUS_DATE) ROLLGATE=$(abspath $(BUILD_DIR)/rollgate) bash image/build.sh
+
+## L4: install the previous release, apply a config, and update it to this release:
+## a trial that fails its checks and one that panics both roll back by themselves; one
+## that passes becomes the system, with the config intact and both kernels booting.
+## Needs make image-previous and internet access (the Arch Linux Archive).
+test-update:
+	$(SUDO) LOG_DIR=$(BUILD_DIR)/test-logs bash tests/vm/update-test.sh $(PREVIOUS_IMAGE) $(SNAPSHOT_DATE)
 
 ## L3: boot the image in QEMU with both kernels.
 test-vm:

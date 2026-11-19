@@ -221,7 +221,7 @@ func updateSystem(a apply.System) update.System {
 	if url == "" {
 		url = update.DefaultReleasesURL
 	}
-	return update.System{Root: a.Root, Run: a.Run, Stream: update.StreamExec, Out: a.Out, Now: a.Now,
+	return update.System{Root: a.Root, Run: a.Run, Stream: update.StreamExec, Out: a.Out, Now: a.Now, Sleep: time.Sleep,
 		Get: update.HTTPGet, Verify: update.GPGVerify(filepath.Join(a.Root, update.PacmanGnupg)),
 		URL: url, Free: update.FreeBytes}
 }

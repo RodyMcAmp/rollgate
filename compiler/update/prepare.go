@@ -91,6 +91,7 @@ type System struct {
 	Stream func(w io.Writer, name string, args ...string) error // long commands (pacman); output shown as it runs
 	Out    io.Writer
 	Now    func() time.Time
+	Sleep  func(time.Duration)
 	Get    Get
 	Verify Verify
 	URL    string                            // releases.json
@@ -208,7 +209,7 @@ func Prepare(s System, want string) error {
 	if err := s.run("btrfs", "subvolume", "snapshot", filepath.Join(top, "@"), next); err != nil {
 		return err
 	}
-	if err := updateNext(s, next, date, m.uuid, options); err != nil {
+	if err := updateNext(s, next, date, m, options); err != nil {
 		if derr := s.run("btrfs", "subvolume", "delete", next); derr != nil {
 			err = errors.Join(err, derr)
 		}
@@ -231,7 +232,7 @@ func Prepare(s System, want string) error {
 
 // updateNext updates the snapshot at next to date and writes its trial boot
 // entry (ADR 0011, steps 4 and 5, before arming).
-func updateNext(s System, next, date, uuid string, options []string) error {
+func updateNext(s System, next, date string, m mount, options []string) error {
 	mirrorlist, err := render("mirrorlist.tmpl", map[string]string{"Date": date, "Path": strings.ReplaceAll(date, "-", "/")})
 	if err != nil {
 		return err
@@ -239,18 +240,69 @@ func updateNext(s System, next, date, uuid string, options []string) error {
 	if err := writeAtomic(filepath.Join(next, MirrorlistPath), mirrorlist, true); err != nil {
 		return err
 	}
-	// The whole root is the snapshot, so snap-pac's own snapshots are skipped.
-	if err := s.Stream(s.Out, "arch-chroot", next, "env", "SNAP_PAC_SKIP=y", "pacman", "-Syu", "--noconfirm"); err != nil {
-		return fmt.Errorf("pacman -Syu in @next failed: %w", err)
+	if err := pacmanUpgrade(s, m); err != nil {
+		return err
 	}
-	trial, err := bootEntry(filepath.Dir(next), "@next", "rollgate update trial ("+date+")", TrialEntry, uuid, options, true)
+	trial, err := bootEntry(filepath.Dir(next), "@next", "rollgate update trial ("+date+")", TrialEntry, m.uuid, options, true)
 	if err != nil {
 		return fmt.Errorf("after the update: %w", err)
 	}
 	if err := setRootSubvol(filepath.Join(next, fstabPath), "/@next"); err != nil {
 		return err
 	}
-	return writeCustom(s.Root, filepath.Dir(next), trial, uuid, options)
+	return writeCustom(s.Root, filepath.Dir(next), trial, m.uuid, options)
+}
+
+// nextMount is where @next is mounted on its own for the chroot.
+const nextMount = "run/rollgate/next"
+
+// pacmanUpgrade runs pacman -Syu inside @next. @next is mounted on its own,
+// not used as a directory below the top-level mount: pacman checks free space
+// per mount point, and inside the chroot / must be one.
+func pacmanUpgrade(s System, m mount) error {
+	dir := filepath.Join(s.Root, nextMount)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	if err := s.run("mount", "-o", "subvol=/@next", m.device, dir); err != nil {
+		return err
+	}
+	err := downloadAndInstall(s, dir)
+	if uerr := s.run("umount", dir); err == nil {
+		err = uerr
+	}
+	return err
+}
+
+// downloadAttempts bounds the retries of a stalled download.
+const downloadAttempts = 3
+
+// downloadAndInstall downloads every package first, retrying: the Arch Linux
+// Archive sometimes stalls (image/build.sh retries for the same reason). A
+// failed download installs nothing, so a retry is safe. Then it installs from
+// the cache.
+func downloadAndInstall(s System, dir string) error {
+	// The whole root is the snapshot, so snap-pac's own snapshots are skipped.
+	pacman := func(args ...string) error {
+		return s.Stream(s.Out, "arch-chroot", append([]string{dir, "env", "SNAP_PAC_SKIP=y", "pacman", "--noconfirm"}, args...)...)
+	}
+	var err error
+	for attempt := 1; attempt <= downloadAttempts; attempt++ {
+		if err = pacman("-Syuw"); err == nil {
+			break
+		}
+		if attempt < downloadAttempts {
+			fmt.Fprintf(s.Out, "Downloading the update failed (attempt %d of %d); retrying in 30 seconds.\n", attempt, downloadAttempts)
+			s.Sleep(30 * time.Second)
+		}
+	}
+	if err != nil {
+		return fmt.Errorf("downloading the update failed %d times: %w", downloadAttempts, err)
+	}
+	if err := pacman("-Su"); err != nil {
+		return fmt.Errorf("pacman -Su in @next failed: %w", err)
+	}
+	return nil
 }
 
 // entry is one GRUB menu entry in custom.cfg.

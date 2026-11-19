@@ -29,8 +29,10 @@ type fakeSystem struct {
 	cmds     []string
 	subvol   string
 	free     uint64
-	pacman   func(next string) error // what pacman -Syu does to @next
-	stateAt  string                  // update.json's state when grub-editenv ran
+	pacman   func(next string) error // what pacman -Su (the install) does to @next
+	download func() error            // how pacman -Syuw (the download) ends
+	sleeps   int
+	stateAt  string // update.json's state when grub-editenv ran
 	verified bool
 	rootid   string // btrfs inspect-internal rootid /
 }
@@ -38,6 +40,7 @@ type fakeSystem struct {
 func newFake(t *testing.T) *fakeSystem {
 	f := &fakeSystem{t: t, root: t.TempDir(), subvol: "/@", free: 10 << 30}
 	f.pacman = func(next string) error { return nil }
+	f.download = func() error { return nil }
 	f.write(MirrorlistPath, imageList)
 	f.write("proc/cmdline", cmdline)
 	f.write(KeysPath, ourKey+"\n")
@@ -108,9 +111,14 @@ func (f *fakeSystem) system() System {
 		Root: f.root, Run: f, Out: io.Discard,
 		Stream: func(w io.Writer, name string, args ...string) error {
 			f.cmds = append(f.cmds, strings.ReplaceAll(name+" "+strings.Join(args, " "), f.root, "ROOT"))
-			return f.pacman(args[0])
+			if args[len(args)-1] == "-Syuw" {
+				return f.download()
+			}
+			// @next mounted at run/rollgate/next is the snapshot itself.
+			return f.pacman(filepath.Join(f.root, topMount, "@next"))
 		},
-		Now: func() time.Time { return time.Date(2026, 11, 23, 12, 0, 0, 0, time.UTC) },
+		Now:   func() time.Time { return time.Date(2026, 11, 23, 12, 0, 0, 0, time.UTC) },
+		Sleep: func(time.Duration) { f.sleeps++ },
 		Get: func(url string) ([]byte, error) {
 			return map[string][]byte{"R": []byte(sample), "R.sig": []byte("SIG")}[url], nil
 		},
@@ -132,7 +140,10 @@ func TestPrepare(t *testing.T) {
 		"findmnt -n -r -o SOURCE,FSROOT,UUID,FSTYPE /",
 		"mount -o subvolid=5 /dev/vda2 ROOT/run/rollgate/btrfs",
 		"btrfs subvolume snapshot ROOT/run/rollgate/btrfs/@ ROOT/run/rollgate/btrfs/@next",
-		"arch-chroot ROOT/run/rollgate/btrfs/@next env SNAP_PAC_SKIP=y pacman -Syu --noconfirm",
+		"mount -o subvol=/@next /dev/vda2 ROOT/run/rollgate/next",
+		"arch-chroot ROOT/run/rollgate/next env SNAP_PAC_SKIP=y pacman --noconfirm -Syuw",
+		"arch-chroot ROOT/run/rollgate/next env SNAP_PAC_SKIP=y pacman --noconfirm -Su",
+		"umount ROOT/run/rollgate/next",
 		"grub-editenv ROOT/efi/grub/grubenv set next_entry=rollgate-trial",
 		"umount ROOT/run/rollgate/btrfs",
 	}
@@ -261,6 +272,41 @@ func TestPrepareFailedUpdate(t *testing.T) {
 		if strings.Contains(cmds, "grub-editenv") || !strings.HasSuffix(cmds, "umount ROOT/run/rollgate/btrfs") {
 			t.Errorf("%s: commands:\n%s", name, cmds)
 		}
+	}
+}
+
+// TestPrepareRetriesDownload: a stalled download is retried; three failures
+// end the update before anything is installed.
+func TestPrepareRetriesDownload(t *testing.T) {
+	f := newFake(t)
+	failures := 2
+	f.download = func() error {
+		if failures > 0 {
+			failures--
+			return errors.New("failed retrieving file: Operation too slow")
+		}
+		return nil
+	}
+	if err := Prepare(f.system(), ""); err != nil {
+		t.Fatalf("two failed downloads, then one that works: %v", err)
+	}
+	if f.sleeps != 2 || strings.Count(strings.Join(f.cmds, "\n"), "pacman --noconfirm -Syuw") != 3 {
+		t.Errorf("%d sleeps, commands:\n%s", f.sleeps, strings.Join(f.cmds, "\n"))
+	}
+
+	f = newFake(t)
+	f.download = func() error { return errors.New("failed retrieving file: Operation too slow") }
+	installed := false
+	f.pacman = func(string) error { installed = true; return nil }
+	err := Prepare(f.system(), "")
+	if err == nil || !strings.Contains(err.Error(), "failed 3 times") || !strings.Contains(err.Error(), "nothing was changed") {
+		t.Errorf("three failed downloads: %v", err)
+	}
+	if installed {
+		t.Error("installed after the downloads failed")
+	}
+	if _, err := os.Stat(filepath.Join(f.root, topMount, "@next")); err == nil {
+		t.Error("@next not deleted")
 	}
 }
 

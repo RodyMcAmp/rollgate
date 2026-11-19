@@ -58,7 +58,7 @@ else
 fi
 
 work=$(mktemp -d /tmp/rgtrial.XXXX) # short: gpg-agent's socket path is limited
-qemu_pid= server_pid=
+qemu_pid='' server_pid=''
 cleanup() {
   if [[ -n $qemu_pid ]]; then kill "$qemu_pid" 2>/dev/null || true; fi
   if [[ -n $server_pid ]]; then kill "$server_pid" 2>/dev/null || true; fi

@@ -5,6 +5,8 @@
 # Env:    BUILD_DIR      output directory (default: <repo>/build). Must be on a Linux
 #                        filesystem, not /mnt/c under WSL.
 #         DISK_SIZE_MIB  disk image size (default: 8192)
+#         IMAGE_DATE     build at this Arch Linux Archive date instead of image/snapshot-date
+#                        (make image-previous: the L4 test's "previous release")
 #         ROLLGATE       the static rollgate binary to install (default: $BUILD_DIR/rollgate,
 #                        built by make rollgate; make image builds it first)
 #
@@ -38,7 +40,7 @@ rollgate_bin=$(realpath -m "${ROLLGATE:-$build_dir/rollgate}")
 [[ -x $rollgate_bin ]] || die "no rollgate binary at $rollgate_bin (run: make rollgate)"
 ((root_mib >= 4096)) || die "DISK_SIZE_MIB too small (need at least $((4096 + esp_mib + 2)))"
 
-date=$(tr -d '[:space:]' < "$image_dir/snapshot-date")
+date=${IMAGE_DATE:-$(tr -d '[:space:]' < "$image_dir/snapshot-date")}
 [[ $date =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || die "bad image/snapshot-date: '$date'"
 # Literal $repo and $arch are expanded by pacman, not by the shell.
 mirror="https://archive.archlinux.org/repos/${date//-//}/\$repo/os/\$arch"

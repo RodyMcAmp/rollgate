@@ -85,7 +85,8 @@ Run `image` and `test-vm` on an Arch host as root (or with sudo); see `docs/dev-
 | `make test-trial` | L3: `rollgate update` in a VM: a trial that fails its checks reboots into the old system, which deletes `@next`; a trial that passes becomes `@`, and the old system `@previous`; `rollgate rollback` goes back (ADR 0011). Needs internet. |
 | `make test-rollback` | L3: rollback rehearsal. Bad update → boot the pre-update snapshot from the GRUB menu → `rollgate-snapshot-rollback` → restored system boots. Follows `docs/runbooks/recovery.md`; keep the two in sync. |
 | `make test-netns` | L2: runs apply's pre-checks with the real `nft`, `dnsmasq`, `unbound-checkconf` and `sshd`, then loads the generated firewall and sysctl settings into network namespaces, runs dnsmasq and sshd with their generated configs, and checks real traffic: firewall policy, NAT, port forwards, DHCP, local DNS and SSH logins (needs root). |
-| `make test-update` *(planned, M4)* | L4: installs the previous release, updates to this one, forces a failure, verifies rollback. |
+| `make image-previous` | Builds the L4 test's "previous release": an image a week before `image/snapshot-date`. |
+| `make test-update` | L4: installs the previous release, applies a config, updates to this one: a trial that fails a check and one that panics roll back by themselves; one that passes becomes the system, with the config intact and both kernels booting. Needs `make image-previous` and internet. |
 
 ## How to make a change
 
