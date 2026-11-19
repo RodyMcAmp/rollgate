@@ -134,6 +134,8 @@ boot_once() {
     lts)     [[ $kernel == *-lts ]] || die "'$name': expected linux-lts, booted $kernel" ;;
   esac
   [[ $watchdog == "$want_watchdog" ]] || die "'$name': expected watchdog=$want_watchdog, got '$watchdog' (log: $serial)"
+  # ADR 0013: systemd-timesyncd keeps the clock right.
+  [[ $line == *" timesync=active "* ]] || die "'$name': systemd-timesyncd isn't running (log: $serial)"
 }
 
 # q35 has a hardware watchdog (iTCO); the older pc machine has none, so the image must

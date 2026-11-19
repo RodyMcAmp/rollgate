@@ -322,6 +322,8 @@ grep -qa "$esp_uuid" "$mnt/efi/EFI/BOOT/BOOTX64.EFI" || die "GRUB EFI binary doe
 grep -qx "RuntimeWatchdogSec=30s" "$mnt/etc/systemd/system.conf.d/10-rollgate-watchdog.conf" || die "systemd watchdog not configured"
 [[ -d $mnt/var/lib/pacman/local/rollgate-${date//-/.}-1 ]] || die "the rollgate package isn't installed"
 [[ -x $mnt/usr/bin/rollgate && -f $mnt/usr/lib/systemd/system/rollgate-health.service ]] || die "the rollgate package's files are missing"
+[[ -L $mnt/usr/lib/systemd/system/sysinit.target.wants/systemd-timesyncd.service ]] ||
+  die "systemd-timesyncd isn't enabled (ADR 0013; the rollgate package enables it)"
 if [[ -n $release_fpr ]]; then
   grep -qx "$release_fpr" "$mnt/usr/lib/rollgate/release-keys" || die "release key not listed in release-keys"
   gpg --homedir "$mnt/etc/pacman.d/gnupg" --batch --with-colons --list-keys "$release_fpr" 2>/dev/null |

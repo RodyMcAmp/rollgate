@@ -106,7 +106,7 @@ rollgate status        the config generation, the release, and the last update
   - **In CI, on every change (`make test-vmware`).** QEMU emulates the VM's NVMe disk and vmxnet3 adapters; the test applies this guide's `router.toml`, confirms over SSH and runs the health checks.
   - The initramfs also carries drivers for VMware's other disk controllers (SATA, LSI Logic, LSI SAS, paravirtual SCSI).
 - **Watchdog:** VMware's virtual hardware has no watchdog Linux can use, so rollgate falls back to its software watchdog. The boot report (`journalctl -b -u rollgate-boot-report`) shows `watchdog=Software_Watchdog:active`.
-- **Clock:** the router doesn't sync its clock yet *(planned, M5)*. In VMware it starts from your PC's clock, so it's close enough for now.
+- **Clock:** the router keeps its clock right with systemd-timesyncd (ADR 0013); `rollgate status` shows whether it is synchronized.
 - **Disk size:** the virtual disk is 32 GB. The `.vmdk` file only stores what's used, about 1.3 GB at first. On first boot the router grows its root filesystem to fill the disk.
 - **Secure Boot** must stay off. rollgate's boot loader isn't signed for it.
 - **Two such VMs** have the same MAC addresses. Don't run them on the same networks at the same time.

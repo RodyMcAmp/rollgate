@@ -165,6 +165,13 @@ On a board without one, `rollgate-softdog.service` loads the kernel's software w
 `softdog` catches a hung systemd, but not a hung kernel; only a hardware watchdog catches that.
 `wdctl` on the router shows which one is in use.
 
+### Clock
+
+Updates check signatures and download over HTTPS, and Unbound checks DNSSEC for the LAN; all of that needs the right time.
+`systemd-timesyncd` keeps the clock right (ADR 0013), with Arch's default servers (`arch.pool.ntp.org`). The `rollgate` package enables it, so routers that update get it too.
+The router resolves names for itself through systemd-resolved, without DNSSEC, so finding the time servers works even when the clock is badly wrong (for example after a dead CMOS battery).
+There's no health check for it: an unreachable time server mustn't roll back an update. `rollgate status` shows whether the clock is synchronized, and a failed `rollgate update` says so when it isn't.
+
 ### Kernels
 
 `linux` (latest stable) is the default boot entry. `linux-lts` is always installed as a second entry in every snapshot.
