@@ -10,6 +10,8 @@
 #      connections fail, then the revert timer brings SSH back by itself.
 #   4. Apply the same config with a long timeout and cut the power: the boot
 #      reverts it before SSH starts.
+#   5. Crash the kernel: the board's watchdog (QEMU q35's iTCO, fed by systemd)
+#      reboots the VM by itself, and the confirmed config is still running.
 #
 # Usage:  sudo tests/vm/apply-test.sh build/rollgate-<date>.img
 # Env:    LOG_DIR, OVMF_CODE, OVMF_VARS as in boot-test.sh; SSH_PORT (default 2224)
@@ -203,4 +205,23 @@ expect "status after boot revert" "Running: generation 1, confirmed" 'rollgate s
 expect "generation 3 reverted" "^ +3  reverted" 'rollgate status'
 check_good_config
 
-log "PASS: rollgate apply can't lock you out (log: $serial)"
+log "5. a hung kernel: the watchdog reboots the router by itself"
+expect "systemd feeds the watchdog" "^RuntimeWatchdogUSec=30s$" 'systemctl show -p RuntimeWatchdogUSec'
+expect "watchdog armed" "^active$" 'cat /sys/class/watchdog/watchdog0/state'
+# Crash the kernel with panic=0, so it never reboots by itself: only the watchdog can
+# reset it. The SSH session dies with the kernel and would wait forever, so it's killed.
+vm 'echo 0 > /proc/sys/kernel/panic; echo c > /proc/sysrq-trigger' >/dev/null 2>&1 &
+crash_pid=$!
+start=$SECONDS
+sleep 10
+kill "$crash_pid" 2>/dev/null || true
+wait "$crash_pid" 2>/dev/null || true
+echo "    kernel crashed (sysrq c)"
+
+log "boot 4: after the watchdog reset"
+wait_for_boot 4
+echo "    the router was back $((SECONDS - start)) s after the crash"
+expect "status after the crash" "Running: generation 1, confirmed" 'rollgate status'
+check_good_config
+
+log "PASS: rollgate apply can't lock you out, and a hung router reboots (log: $serial)"

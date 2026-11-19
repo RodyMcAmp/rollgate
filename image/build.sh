@@ -233,7 +233,8 @@ grub-mkconfig -o /efi/grub/grub.cfg
 
 systemctl enable systemd-networkd.service systemd-resolved.service sshd.service \
   nftables.service grub-btrfsd.service snapper-cleanup.timer \
-  rollgate-boot-report.service rollgate-boot.service rollgate-health.service
+  rollgate-boot-report.service rollgate-boot.service rollgate-health.service \
+  rollgate-softdog.service
 # The CLI runs on the target (a static binary needs nothing from it).
 rollgate help >/dev/null
 # Nothing in M1 needs network-online, and unplugged ports would make it time out.
@@ -268,6 +269,8 @@ grep -q "rootflags=subvol=@" "$grub_cfg" || die "grub.cfg does not set rootflags
 grep -qa "$esp_uuid" "$mnt/efi/EFI/BOOT/BOOTX64.EFI" || die "GRUB EFI binary does not search for ESP UUID $esp_uuid"
 [[ -f $mnt/boot/vmlinuz-linux && -f $mnt/boot/vmlinuz-linux-lts ]] || die "kernels missing from /boot"
 [[ -L $mnt/etc/systemd/system/sysinit.target.wants/rollgate-boot.service ]] || die "rollgate-boot.service not enabled"
+[[ -L $mnt/etc/systemd/system/sysinit.target.wants/rollgate-softdog.service ]] || die "rollgate-softdog.service not enabled"
+grep -qx "RuntimeWatchdogSec=30s" "$mnt/etc/systemd/system.conf.d/10-rollgate-watchdog.conf" || die "systemd watchdog not configured"
 # World-writable files or non-sticky directories (sticky ones like /tmp are fine).
 world_writable=$(find "$mnt" \( -type f -o -type d \) -perm -0002 ! -perm -1000 -print -quit)
 [[ -z $world_writable ]] || die "world-writable path in image: ${world_writable#"$mnt"}"

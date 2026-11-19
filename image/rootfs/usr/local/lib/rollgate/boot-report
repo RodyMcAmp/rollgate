@@ -1,12 +1,17 @@
 #!/bin/sh
 # Prints one line on the console once boot has finished. The L3 tests
 # (tests/vm/) parse it; humans at the console can read it too.
-#   ROLLGATE_BOOT state=<running|degraded|...> kernel=<uname -r> failed=<unit,unit,...>
-# Replaced by the health checks (/usr/lib/rollgate/health.d) in M4.
+#   ROLLGATE_BOOT state=<running|degraded|...> kernel=<uname -r> watchdog=<driver>:<active|inactive> failed=<unit,unit,...>
+# watchdog= is /dev/watchdog0's identity (spaces as _), or "none". failed= stays last.
 
 state=$(systemctl is-system-running --wait)
 failed=$(systemctl list-units --failed --plain --no-legend | awk '{print $1}' | paste -sd, -)
-line="ROLLGATE_BOOT state=$state kernel=$(uname -r) failed=$failed"
+wd=/sys/class/watchdog/watchdog0
+watchdog=none
+if [ -r "$wd/identity" ]; then
+  watchdog="$(tr ' ' _ < "$wd/identity"):$(cat "$wd/state" 2>/dev/null || echo unknown)"
+fi
+line="ROLLGATE_BOOT state=$state kernel=$(uname -r) watchdog=$watchdog failed=$failed"
 echo "$line"
 
 # Test VMs attach a virtio-serial port with this name, so the tests get the line on a

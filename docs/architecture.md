@@ -136,6 +136,19 @@ The checks rollgate ships are one-line scripts calling `rollgate check <name>`, 
 
 Missing IPv6 from the ISP is never a health-check failure. It's a normal state (ADR 0008).
 
+### Watchdog
+
+A router nobody is watching must not stay hung, so the watchdog is on at every boot, not only during a trial.
+systemd (PID 1) feeds the board's watchdog (`image/rootfs/etc/systemd/system.conf.d/10-rollgate-watchdog.conf`):
+
+- `RuntimeWatchdogSec=30s`: if the kernel or systemd stops for 30 seconds, the board resets.
+- `RebootWatchdogSec=2min`: a reboot that hangs is cut short too.
+
+Most x86 boards have a hardware watchdog the kernel loads a driver for (Intel `iTCO_wdt`, AMD `sp5100_tco`, and others).
+On a board without one, `rollgate-softdog.service` loads the kernel's software watchdog (`softdog`) early in boot, so systemd always has a device.
+`softdog` catches a hung systemd, but not a hung kernel; only a hardware watchdog catches that.
+`wdctl` on the router shows which one is in use.
+
 ### Kernels
 
 `linux` (latest stable) is the default boot entry. `linux-lts` is always installed as a second entry in every snapshot.

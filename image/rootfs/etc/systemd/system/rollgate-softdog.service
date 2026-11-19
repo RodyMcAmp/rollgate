@@ -1,0 +1,20 @@
+# Loads the kernel's software watchdog (softdog) when the board has no hardware
+# watchdog, so systemd's RuntimeWatchdogSec (system.conf.d/10-rollgate-watchdog.conf)
+# always has a device. softdog catches a hung systemd, but not a hung kernel: a
+# hardware watchdog is better, and most x86 boards have one (iTCO, sp5100, ...).
+[Unit]
+Description=rollgate: software watchdog when the board has none
+DefaultDependencies=no
+After=systemd-udev-trigger.service systemd-modules-load.service
+Before=sysinit.target shutdown.target
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Give udev time to load the board's own watchdog driver first.
+ExecStartPre=-/usr/bin/udevadm settle --timeout=15
+ExecStart=/bin/sh -c 'test -e /dev/watchdog0 || exec /usr/bin/modprobe softdog'
+
+[Install]
+WantedBy=sysinit.target
