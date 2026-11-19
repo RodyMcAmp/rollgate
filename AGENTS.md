@@ -11,10 +11,11 @@ and for humans who want the short version. Read this whole file before changing 
 dnsmasq, Unbound). Packages come from Arch's stable repos, pinned to a dated snapshot
 that has passed our test suite. Every update can be rolled back from the boot menu.
 
-Status: **M2 (config compiler) is done**: the image builds and passes the L3 boot test and
-rollback rehearsal in CI (Arch snapshot 2026-11-16), and `rollgate` compiles `router.toml`
-into configs proven by golden and L2 tests. The image doesn't install them yet; that is
-M3 (safe apply). Anything marked
+Status: **M4 (updates and rollback) is done**: the image applies `router.toml` with
+commit-confirm (M3, ADR 0010), and `rollgate update` installs a new release into `@next`,
+trial-boots it and promotes or rolls it back by itself (ADR 0011), proven by the L3 and L4
+tests in CI. Releases are published and signed by the release workflow (ADR 0012). Next is
+M5 (real-hardware pilot). Anything marked
 *(planned)* doesn't exist until the milestone in `docs/roadmap.md` delivers it.
 
 ## Hard rules (never break these)
