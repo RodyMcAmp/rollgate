@@ -20,6 +20,9 @@ package() {
   install -Dm0644 -t "$pkgdir/usr/lib/systemd/system" \
     "$startdir/rollgate-boot.service" "$startdir/rollgate-health.service"
   install -Dm0755 -t "$pkgdir/usr/lib/rollgate/health.d" "$startdir"/health.d/*
+  # ADR 0013: systemd-timesyncd keeps the clock right, on routers that update too.
+  install -dm0755 "$pkgdir/usr/lib/systemd/system/sysinit.target.wants"
+  ln -s ../systemd-timesyncd.service "$pkgdir/usr/lib/systemd/system/sysinit.target.wants/systemd-timesyncd.service"
   install -dm0755 "$pkgdir/etc/rollgate"
   install -dm0700 "$pkgdir/etc/rollgate/secrets"
 }

@@ -43,8 +43,9 @@ changing the router (as root; docs/architecture.md#safe-apply):
                            (or the console), which proves SSH still works
   revert                   undo an unconfirmed apply now
   status                   what is running, what waits for confirmation, whether
-                           router.toml has changes that aren't applied, and the
-                           release and last update
+                           router.toml has changes that aren't applied, the
+                           release and last update, and whether the clock is
+                           synchronized
   rollback-config [N]      put generation N's router.toml back (default: the
                            confirmed one before the current) and apply it
   update [DATE]            update to the newest release (or DATE) in a copy of the
@@ -137,6 +138,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "rollgate status: %v\n", err)
 			return 1
 		}
+		_, clock := update.Clock(s.Run)
+		fmt.Fprintf(stdout, "Clock: %s.\n", clock)
 		return 0
 	case "rollback":
 		if len(args) > 1 {
@@ -209,7 +212,7 @@ func updateCmd(want string, stdout, stderr io.Writer) int {
 			return nil
 		}
 		if err != nil {
-			return err
+			return fmt.Errorf("%w%s", err, update.ClockHint(a.Run))
 		}
 		if out, err := a.Run.Run("systemctl", "reboot"); err != nil {
 			return fmt.Errorf("the trial is armed, but rebooting failed (%v: %s); reboot to start it", err, out)
