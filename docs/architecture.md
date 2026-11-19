@@ -89,6 +89,17 @@ The commit-confirm flow (ADR 0010; `rollgate apply`, `confirm` and `revert`) gua
 
 Changes that cannot affect reachability (a DNS blocklist, for example) still use this flow. One code path is easier to test than two.
 
+### The local API (`rollgate api`, ADR 0014)
+
+The web UI (M6) changes nothing itself. It asks `rollgate api`, which runs as root and calls the same code as the CLI:
+
+- **Where:** HTTP on the Unix socket `/run/rollgate/api.sock`, opened by `rollgate-api.socket`. The socket is `root:rollgate-api`, mode 0660, so the kernel lets only root and the `rollgate-api` group (the web server) connect.
+- **What it accepts:** a fixed list of requests (`compiler/api`). `GET /v1/status`, `/v1/health` and `/v1/config` read. `POST /v1/validate`, `diff`, `apply`, `confirm`, `revert`, `update` and `rollback` change things, one at a time. There is no request that runs a command.
+- **Commit-confirm:** `apply` and `confirm` carry the client's connection (the browser's address and port). An apply from one connection can't be confirmed from the same one, as with SSH.
+- **Applying:** `apply` takes the whole `router.toml`. A config that doesn't validate is refused before anything changes. Otherwise it becomes `/etc/rollgate/router.toml`, like an edit from the CLI, and is applied.
+- **Logging:** every request is logged in the journal with the asking process (`journalctl -u rollgate-api`).
+- **Off by default:** the socket isn't enabled. The web UI will enable it once a web password is set.
+
 ## Updates and rollback
 
 See [build-and-release.md](build-and-release.md) for the release train. On the device:

@@ -1,0 +1,11 @@
+# rollgate api (ADR 0014), started by rollgate-api.socket on the first request.
+# It runs as root because it does what the CLI does as root: apply, confirm,
+# revert, update and rollback. It offers only those (compiler/api), and logs
+# every request with the asking process.
+[Unit]
+Description=rollgate: local API for the web UI
+Requires=rollgate-api.socket
+After=rollgate-api.socket
+
+[Service]
+ExecStart=/usr/bin/rollgate api
