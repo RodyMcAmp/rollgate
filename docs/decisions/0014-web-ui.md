@@ -1,6 +1,6 @@
 # 0014. The web UI: an unprivileged web server over a small root API
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-19
 
 ## Context
