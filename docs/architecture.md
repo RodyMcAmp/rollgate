@@ -100,6 +100,15 @@ The web UI (M6) changes nothing itself. It asks `rollgate api`, which runs as ro
 - **Logging:** every request is logged in the journal with the asking process (`journalctl -u rollgate-api`).
 - **Off by default:** the socket isn't enabled. The web UI will enable it once a web password is set.
 
+### Web password and certificate (`rollgate web-password`, ADR 0014)
+
+`rollgate web-password` (as root, at the console or over SSH) sets the web UI's one admin password. It asks twice without echo; `--stdin` reads one line instead, for scripts.
+
+- **The password** must be at least 10 characters. Only a hash is kept: salted PBKDF2-HMAC-SHA256, 600,000 iterations (Go's standard library), in `/etc/rollgate/secrets/web-password`, mode 0600.
+- **The certificate:** the first time, it also makes the web UI's HTTPS certificate and key (`web.crt`, `web.key`, ECDSA P-256, self-signed, valid 10 years). The certificate covers the router's host name and the static addresses of its management zones from the running config.
+- **The fingerprint:** it prints the certificate's SHA-256 fingerprint, and `rollgate status` shows it again, so the user can check that the browser's warning is about their own router. Changing the password later keeps the certificate, so the fingerprint stays the same.
+- **Snapshots:** the secrets are part of `@`, so a system rollback brings back the password that system had.
+
 ## Updates and rollback
 
 See [build-and-release.md](build-and-release.md) for the release train. On the device:

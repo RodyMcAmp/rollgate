@@ -19,6 +19,7 @@ import (
 	"github.com/RodyMcAmp/rollgate/compiler/config"
 	"github.com/RodyMcAmp/rollgate/compiler/health"
 	"github.com/RodyMcAmp/rollgate/compiler/update"
+	"github.com/RodyMcAmp/rollgate/compiler/web"
 )
 
 // apiCmd is rollgate api (ADR 0014): the local API the web UI uses, on the
@@ -116,6 +117,7 @@ func status(s apply.System, w io.Writer) error {
 	}
 	_, clock := update.Clock(s.Run)
 	fmt.Fprintf(w, "Clock: %s.\n", clock)
+	fmt.Fprintln(w, web.Status(s.Root))
 	return nil
 }
 

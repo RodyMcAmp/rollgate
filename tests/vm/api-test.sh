@@ -7,6 +7,9 @@
 #   3. Apply tests/vm/apply/good.toml: it becomes router.toml and runs. A confirm from
 #      the applying connection is refused; from another it works (ADR 0010).
 #   4. The health checks pass over the API, and the journal names who asked what.
+#   5. rollgate web-password: refuses short passwords, stores a hash (0600), makes the
+#      HTTPS certificate whose fingerprint it and rollgate status print, and keeps that
+#      certificate when the password changes.
 #
 # Usage:  sudo tests/vm/api-test.sh build/rollgate-<date>.img
 # Env:    LOG_DIR, OVMF_CODE, OVMF_VARS as in boot-test.sh; SSH_PORT (default 2244)
@@ -137,4 +140,28 @@ journal=$(vm 'journalctl -u rollgate-api.service -o cat --no-pager')
 [[ $journal == *"POST /v1/confirm from pid "*" uid 0"* ]] || die "the journal doesn't log requests with the asking process:
 $journal"
 log "  health passes; requests are logged with the asking process"
+
+log "5. the web password and the HTTPS certificate"
+[[ $(vm 'rollgate status') == *"Web password: not set"* ]] || die "status doesn't say the web password isn't set"
+if vm 'echo "too short" | rollgate web-password --stdin' >/dev/null 2>&1; then
+  die "a password under 10 characters was accepted"
+fi
+vm 'echo "correct horse battery staple" | rollgate web-password --stdin' > "$work/password.out" ||
+  die "rollgate web-password failed: $(cat "$work/password.out")"
+modes=$(vm 'stat -c %a /etc/rollgate/secrets/web-password /etc/rollgate/secrets/web.key | paste -sd" "')
+[[ $modes == "600 600" ]] || die "the password hash and key have modes $modes, want 600 600"
+if vm 'grep -q horse /etc/rollgate/secrets/web-password'; then
+  die "the password is stored in plain text"
+fi
+fp=$(vm 'openssl x509 -in /etc/rollgate/secrets/web.crt -noout -fingerprint -sha256 | cut -d= -f2')
+if [[ -z $fp ]] || ! grep -qF "$fp" "$work/password.out"; then
+  die "the printed fingerprint isn't the certificate's ($fp)"
+fi
+[[ $(vm 'rollgate status') == *"Certificate fingerprint (SHA-256): $fp"* ]] || die "rollgate status doesn't show the fingerprint"
+[[ $(vm 'openssl x509 -in /etc/rollgate/secrets/web.crt -noout -ext subjectAltName') == *"10.0.2.15"* ]] ||
+  die "the certificate isn't for the management address 10.0.2.15"
+vm 'echo "another long password" | rollgate web-password --stdin' >/dev/null || die "changing the password failed"
+[[ $(vm 'openssl x509 -in /etc/rollgate/secrets/web.crt -noout -fingerprint -sha256 | cut -d= -f2') == "$fp" ]] ||
+  die "changing the password replaced the certificate"
+log "  short passwords refused; stored hashed (0600); the fingerprint matches; a new password keeps the certificate"
 echo "api-test: PASS"

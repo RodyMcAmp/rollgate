@@ -91,5 +91,6 @@ This exact sequence is tested automatically on every release (`make test-rollbac
 | `nft list ruleset \| less` | The firewall rules that are actually loaded |
 | `snapper list` | Snapshots and their numbers |
 | `rollgate status` | Which settings are running, whether a change is waiting for `rollgate confirm`, the recent history, the release, what the last update did, and whether the clock is right |
+| `rollgate web-password` | Sets a new web UI password, if you forgot it |
 | `timedatectl` | The time, and whether it is synchronized. Updates fail while the clock is wrong |
 | `rollgate health` | Whether the firewall, WAN, DNS, SSH and services are all working, one line each |
