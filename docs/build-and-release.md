@@ -84,11 +84,12 @@ ADR 0012 lists these steps. An agent can't do them, because the private key must
 1. Create the key on your own computer (Linux, WSL or macOS with gnupg):
 
    ```
-   gpg --quick-generate-key "rollgate releases" ed25519 sign never
+   gpg --batch --pinentry-mode loopback --passphrase '' --quick-generate-key "rollgate releases" ed25519 sign never
    gpg --list-secret-keys --with-colons | grep '^fpr' | head -1 | cut -d: -f10
    ```
 
    The second command prints the fingerprint (40 characters). Without an expiry date the key can't stop updates by expiring; replacing it later needs the rotation ADR that ADR 0012 mentions.
+   The key has **no passphrase**, because the release workflow signs with nobody there to type one; the workflow stops with an error if the key has one. That makes the secret and the offline backup (step 4) the only protection, so keep the backup locked away.
 2. Commit the **public** key: `gpg --armor --export <fingerprint> > image/release-key.asc`, in a pull request. From then on every image trusts it.
 3. Store the **private** key as the repository secret, then delete the file:
 

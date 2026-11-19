@@ -85,6 +85,9 @@ jobs:
           printf '%s\n' "$ROLLGATE_SIGNING_KEY" | gpg --batch --quiet --import
           fpr=$(gpg --with-colons --list-secret-keys | awk -F: '$1 == "fpr" { print $10; exit }')
           [ -n "$fpr" ] || { echo "::error::ROLLGATE_SIGNING_KEY holds no secret key"; exit 1; }
+          # Nobody is there to type a passphrase: fail now, not after the image build.
+          echo test | gpg --batch --pinentry-mode loopback --passphrase '' --local-user "$fpr" --sign >/dev/null 2>&1 ||
+            { echo "::error::the signing key can't sign unattended; it must have no passphrase (docs/build-and-release.md)"; exit 1; }
           # Routers installed from this release must trust the key that signs it.
           [ -f image/release-key.asc ] || { echo "::error::image/release-key.asc is missing: routers installed from this release couldn't check updates (ADR 0012)"; exit 1; }
           image_fpr=$(gpg --batch --with-colons --show-keys image/release-key.asc | awk -F: '$1 == "fpr" { print $10; exit }')
