@@ -39,10 +39,47 @@ func TestRollback(t *testing.T) {
 		t.Errorf("output:\n%s", out.String())
 	}
 
-	// Rolling back again before the reboot is refused: / is now @previous.
+	// Rolling back again before the reboot undoes it: the running system, now
+	// @previous, becomes @ again.
 	f.subvol = "/@previous"
-	if err := Rollback(f.system()); err == nil || !strings.Contains(err.Error(), "reboot first") {
-		t.Errorf("second rollback before reboot: %v", err)
+	out.Reset()
+	s.Out = &out
+	if err := Rollback(s); err != nil {
+		t.Fatalf("second rollback before the reboot: %v", err)
+	}
+	if f.which("@") != "@" || f.which("@previous") != "@previous" {
+		t.Errorf("after undoing: @ is %s, @previous is %s", f.which("@"), f.which("@previous"))
+	}
+	if st, _ := LoadState(f.root); st.State != RolledBack || st.Date != "2026-11-16" || st.From != "2026-11-09" {
+		t.Errorf("update.json after undoing: %+v", st)
+	}
+	if !strings.Contains(out.String(), "No reboot is needed") {
+		t.Errorf("output:\n%s", out.String())
+	}
+}
+
+// TestRollbackFromPreviousEntry: booted with GRUB's "rollgate previous system"
+// entry, rollgate rollback makes the running system @ for good.
+func TestRollbackFromPreviousEntry(t *testing.T) {
+	f := newTrialFake(t, "/@previous", Promoted)
+	f.write(MirrorlistPath, strings.ReplaceAll(imageList, "11/16", "11/09")) // what runs is @previous
+	if err := Rollback(f.system()); err != nil {
+		t.Fatal(err)
+	}
+	if f.which("@") != "@previous" || f.which("@previous") != "@" {
+		t.Errorf("@ is %s, @previous is %s", f.which("@"), f.which("@previous"))
+	}
+	st, _ := LoadState(f.root)
+	if st.State != RolledBack || st.Date != "2026-11-09" || st.From != "2026-11-16" {
+		t.Errorf("update.json: %+v", st)
+	}
+	if custom := f.read("efi/grub/custom.cfg"); !strings.Contains(custom, "rollgate previous system (2026-11-16)") {
+		t.Errorf("custom.cfg:\n%s", custom)
+	}
+	// Anything else, such as a snapshot booted for recovery, is refused.
+	f = newTrialFake(t, "/@snapshots/3/snapshot", Promoted)
+	if err := Rollback(f.system()); err == nil || !strings.Contains(err.Error(), "not @ or @previous") {
+		t.Errorf("from a snapshot: %v", err)
 	}
 }
 

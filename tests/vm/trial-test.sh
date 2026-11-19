@@ -14,6 +14,8 @@
 #      and the next boot is the updated system.
 #   4. rollgate rollback: after a reboot the original system runs again, and the
 #      updated one is @previous.
+#   5. The "rollgate previous system" boot menu entry, chosen once, boots @previous
+#      cleanly, and rollgate rollback there makes it @ for good.
 #
 # The image's health wait is 5 minutes; the test shortens it to 90 s with a drop-in.
 #
@@ -260,5 +262,27 @@ expect "running from @" "^/@$" 'findmnt -no FSROOT /'
 expect "the updated system is @previous" "uuid $uuid_b path @previous$" 'btrfs subvolume list -u /'
 expect "previous system entry" "--id rollgate-previous" 'cat /efi/grub/custom.cfg'
 echo "    the original system runs again; the updated one is kept as @previous"
+
+log "5. the previous system's boot menu entry, chosen by hand"
+# What docs/runbooks/recovery.md tells someone who can't log in to do: pick
+# "rollgate previous system" in GRUB's menu (here: GRUB's one-shot choice).
+vm "grub-editenv /efi/grub/grubenv set next_entry=rollgate-previous"
+old_boot=$(vm 'cat /proc/sys/kernel/random/boot_id' | tr -d '\r')
+vm systemctl reboot 2>/dev/null || true
+wait_until "the boot of the previous system's entry" "$timeout_s" "[ \"\$(cat /proc/sys/kernel/random/boot_id)\" != $old_boot ]"
+started_cleanly
+expect "running from @previous" "^/@previous$" 'findmnt -no FSROOT /'
+[[ $(vm "$uuid_cmd" | tr -d '\r') == "$uuid_b" ]] || die "the previous system's entry didn't boot the updated system kept as @previous"
+echo "    the entry boots @previous with every unit running"
+# There, rollgate rollback keeps it: the running system becomes @.
+expect "rollback from @previous" "No reboot is needed" 'rollgate rollback'
+expect "now @" "^/@$" 'findmnt -no FSROOT /'
+old_boot=$(vm 'cat /proc/sys/kernel/random/boot_id' | tr -d '\r')
+vm systemctl reboot 2>/dev/null || true
+wait_until "the boot after rolling back from @previous" "$timeout_s" "[ \"\$(cat /proc/sys/kernel/random/boot_id)\" != $old_boot ]"
+started_cleanly
+[[ $(vm "$uuid_cmd" | tr -d '\r') == "$uuid_b" ]] || die "after rollgate rollback from @previous, the next boot isn't that system"
+expect "the other one is @previous" "uuid $uuid_a path @previous$" 'btrfs subvolume list -u /'
+echo "    rollgate rollback there made it @; it's what boots next"
 
 log "PASS: a failing trial goes away, a passing one becomes the system, and rollback goes back (log: $serial)"

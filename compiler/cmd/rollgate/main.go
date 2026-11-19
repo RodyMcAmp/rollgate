@@ -49,7 +49,9 @@ changing the router (as root; docs/architecture.md#safe-apply):
   update [DATE]            update to the newest release (or DATE) in a copy of the
                            system, then reboot into it once as a trial (ADR 0011)
   rollback                 make the system before the last update the system
-                           again (it and this one swap places); then reboot
+                           again (it and this one swap places); then reboot.
+                           Booted from the "rollgate previous system" menu entry,
+                           it keeps the running system instead
 
 health (docs/architecture.md#health-checks):
   health [-wait SECONDS] [-boot]

@@ -37,7 +37,14 @@ reboot
 ```
 
 `rollgate rollback` keeps the updated system as `@previous`, so nothing is lost; running it again goes forward.
-This is tested automatically on every release (`make test-trial`).
+
+If you can't log in to the updated system at all:
+
+1. Reboot the router (power off, wait 10 seconds, power on).
+2. In the GRUB boot menu, choose **"rollgate previous system (DATE)"**. It starts the system from before the update, for this one boot.
+3. Log in at the console and run `rollgate rollback`. That system becomes the system for good; no reboot is needed.
+
+Both ways are tested automatically on every release (`make test-trial`).
 
 If that doesn't help, or you updated packages by hand with `pacman`, use the boot menu:
 

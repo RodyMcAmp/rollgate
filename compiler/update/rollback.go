@@ -17,6 +17,10 @@ const RolledBack = "rolled-back"
 // one atomic step, so the next boot is the previous system and this one is
 // kept as @previous (rollgate rollback again goes forward). The running
 // system keeps running until the reboot.
+//
+// Run from @previous (booted with GRUB's "rollgate previous system" entry, or
+// after a rollback before its reboot), the same swap makes the running system
+// @: it stays the system, and no reboot is needed.
 func Rollback(s System) error {
 	unlock, err := apply.Lock(s.Root)
 	if err != nil {
@@ -39,8 +43,9 @@ func Rollback(s System) error {
 	if err != nil {
 		return err
 	}
-	if m.subvol != "/@" {
-		return fmt.Errorf("the running system is %s, not @: after a rollback, reboot first", m.subvol)
+	fromPrevious := m.subvol == "/@previous"
+	if m.subvol != "/@" && !fromPrevious {
+		return fmt.Errorf("the running system is %s, not @ or @previous: rollback works only between those two", m.subvol)
 	}
 	running, err := RunningRelease(s.Root)
 	if err != nil {
@@ -50,32 +55,46 @@ func Rollback(s System) error {
 	if err != nil {
 		return err
 	}
-	var previous string
+	// other is the system that isn't running: the one that becomes @, or,
+	// from @previous, the one that stops being @.
+	other, otherDate := "@previous", ""
+	if fromPrevious {
+		other = "@"
+	}
 	err = withTop(s, m, func(top string) error {
-		prev := filepath.Join(top, "@previous")
-		if _, err := os.Stat(prev); errors.Is(err, os.ErrNotExist) {
+		if _, err := os.Stat(filepath.Join(top, "@previous")); errors.Is(err, os.ErrNotExist) {
 			return errors.New("there is no previous system to go back to")
 		}
-		if previous, err = RunningRelease(prev); err != nil {
-			return fmt.Errorf("@previous: %w", err)
+		if otherDate, err = RunningRelease(filepath.Join(top, other)); err != nil {
+			return fmt.Errorf("%s: %w", other, err)
 		}
-		if _, err := bootEntry(top, "@previous", "", "", m.uuid, nil, false); err != nil {
-			return fmt.Errorf("not rolling back: %w", err)
+		if !fromPrevious {
+			if _, err := bootEntry(top, "@previous", "", "", m.uuid, nil, false); err != nil {
+				return fmt.Errorf("not rolling back: %w", err)
+			}
 		}
-		if err := s.run("mv", "--exchange", "--no-target-directory", prev, filepath.Join(top, "@")); err != nil {
+		if err := s.run("mv", "--exchange", "--no-target-directory", filepath.Join(top, "@previous"), filepath.Join(top, "@")); err != nil {
 			return err
 		}
-		// The previous system's entry now boots the system being left.
+		// The previous system's entry now boots the one that stopped being @.
 		return writeCustom(s.Root, top, nil, m.uuid, options)
 	})
 	if err != nil {
 		return err
 	}
 	now := s.Now().UTC()
-	if err := saveState(s.Root, State{State: RolledBack, Date: previous, From: running, Started: now, Finished: now}); err != nil {
+	st = State{State: RolledBack, Date: otherDate, From: running, Started: now, Finished: now}
+	if fromPrevious {
+		st.Date, st.From = running, otherDate
+	}
+	if err := saveState(s.Root, st); err != nil {
 		return err
 	}
-	fmt.Fprintf(s.Out, "The previous system (%s) is now @, and this one (%s) is kept as @previous.\n", previous, running)
+	if fromPrevious {
+		fmt.Fprintf(s.Out, "This system (%s) is now @ and stays the system; the one it replaces (%s) is kept as @previous. No reboot is needed.\n", running, otherDate)
+		return nil
+	}
+	fmt.Fprintf(s.Out, "The previous system (%s) is now @, and this one (%s) is kept as @previous.\n", otherDate, running)
 	fmt.Fprintln(s.Out, "Reboot to start it: reboot")
 	return nil
 }
