@@ -1,0 +1,2 @@
+[{"op": "change", "table": "firewall.port_forward", "index": 0, "id": ["name", "game server"],
+  "fields": [["wan_port", "27015-27030"], ["protocol", "tcp+udp"]]}]

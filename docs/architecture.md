@@ -69,6 +69,15 @@ router.toml ──validate──▶ typed config ──compile──▶ staging 
 3. **diff**: show what would change compared with the live generation (`rollgate diff`). Until M3 stores generations, it compares with the files installed on the system, and also lists rollgate's per-interface networkd files that the new config no longer produces.
 4. **apply**: see [Safe apply](#safe-apply).
 
+### Changing router.toml from a form (`compiler/edit`, ADR 0016)
+
+The web UI's forms *(planned)* change `router.toml` through `compiler/edit`, which edits the file's text the way a person would, so comments, order and hand edits stay.
+- **Edits:** add, change or remove an entry in a list of sections (`[[firewall.port_forward]]`, `[[dhcp.<name>.static]]`, `[[vlan]]`), and set keys in a section (`[system]`). A change names its entry by position and an identifying value (a port forward's `name`), and is refused if the file changed meanwhile.
+- **Only the lines that must change:** a changed key keeps the rest of its line, including its comment; a removed entry takes the comment lines directly above it; new sections go after their family (`[dhcp.guest]` after the other `[dhcp...]` sections) in the format `examples/router.toml` uses.
+- **Checked by parsing again:** the result must mean the old config plus exactly the edits, and every other line must be unchanged; otherwise nothing is changed.
+- **Refusals:** a section written in a way the writer doesn't edit (a value over several lines, an inline table, a dotted key, a quoted section name) is left alone, and the page points to the Advanced editor.
+- The result then goes the normal way: validate, diff, apply, confirm.
+
 ### Generations
 
 Every apply *(planned, M3)* stores the compiled file set in `/var/lib/rollgate/generations/<N>/` along with the `router.toml` that produced it (ADR 0010).

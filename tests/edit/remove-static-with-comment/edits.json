@@ -1,0 +1,1 @@
+[{"op": "remove", "table": "dhcp.lan.static", "index": 1, "id": ["hostname", "printer"]}]

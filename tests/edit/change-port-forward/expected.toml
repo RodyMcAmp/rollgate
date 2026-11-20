@@ -1,0 +1,14 @@
+schema_version = 1
+
+[[firewall.port_forward]]
+name = "game server"
+protocol = "tcp+udp"
+wan_port   =   "27015-27030"   # the game's default port
+to = "192.168.10.50:27015"
+
+# Plex, for watching away from home.
+[[firewall.port_forward]]
+name = "plex"
+protocol = "tcp"
+wan_port = 32400
+to = "192.168.10.5:32400"
