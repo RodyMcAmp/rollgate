@@ -78,6 +78,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /confirm", s.confirmPage)
 	mux.HandleFunc("POST /confirm", s.confirm)
 	mux.HandleFunc("POST /revert", s.revert)
+	mux.HandleFunc("GET /devices", s.devicesPage)
+	mux.HandleFunc("POST /devices", s.devices)
 	mux.HandleFunc("GET /forwards", s.forwardsPage)
 	mux.HandleFunc("POST /forwards", s.forwards)
 	mux.HandleFunc("GET /updates", s.updatesPage)
@@ -263,6 +265,11 @@ type page struct {
 	Advanced  bool         // the error suggests the Advanced editor
 
 	System *sysView // overview: kernel, uptime, memory, disk, interfaces
+
+	Networks []network  // devices: networks with DHCP
+	Fixed    []fixedRow // devices: fixed addresses
+	Online   []leaseRow // devices: current DHCP leases
+	DevForm  deviceForm // devices: the add or edit form
 }
 
 // newPage starts a page for a logged-in session, with any pending change.

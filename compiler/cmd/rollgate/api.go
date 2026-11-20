@@ -108,6 +108,7 @@ func apiBackend() api.Backend {
 			}
 			return &api.Pending{Generation: p.Generation, Deadline: p.Deadline}, nil
 		},
+		Leases: func() ([]sysinfo.Lease, error) { return sysinfo.ReadLeases(sysinfo.LeaseFile) },
 		System: func() (*sysinfo.Info, error) {
 			info := sysinfo.Read("/", interfaceAddrs)
 			info.Release, _ = update.RunningRelease("/")

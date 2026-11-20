@@ -1,0 +1,130 @@
+{{template "top" .}}
+<h1>Devices</h1>
+<p class="lede">What's on your network now, and the devices that always get the same address. A fixed address keeps a port forward pointing at the right device, and gives it a name on the network.</p>
+
+{{if .Reviewing}}
+<section aria-labelledby="review">
+<h2 id="review">{{with .Removing}}Remove the fixed address of "{{.}}"?{{else}}Review the change{{end}}</h2>
+{{with .Output}}<pre>{{.}}</pre>{{end}}
+{{if .Valid}}
+<p class="hint">This is the change to router.toml. Nothing has changed on the router yet.</p>
+{{if .Changes}}<pre class="diff">{{range .ChangeLines}}<span class="{{.Class}}">{{.Text}}</span>
+{{end}}</pre>{{end}}
+<details>
+<summary>What changes in the router's system files</summary>
+<pre class="diff">{{.Files}}</pre>
+</details>
+{{if .Pending}}
+<p class="notice">Another change is waiting to be kept or undone. Do that first (in the bar at the top), then apply this one.</p>
+{{else}}
+<form method="post" action="/settings" class="buttons">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<input type="hidden" name="base" value="{{.Base}}">
+<input type="hidden" name="checked" value="{{.Checked}}">
+<input type="hidden" name="config64" value="{{.Config64}}">
+<button type="submit" name="action" value="apply">Apply</button>
+<a href="/devices">Cancel</a>
+</form>
+<p class="help">After Apply, press Keep in the bar at the top. A device picks up its new address the next time it renews it, or when it reconnects.</p>
+{{end}}
+{{end}}
+</section>
+{{end}}
+
+<section aria-labelledby="online">
+<h2 id="online">Connected now</h2>
+{{if .Online}}
+<div class="table">
+<table>
+<thead><tr><th>Name</th><th>Address</th><th>Network</th><th>Hardware address</th><th>Lease ends</th><th><span class="sr-only">Actions</span></th></tr></thead>
+<tbody>
+{{range .Online}}<tr>
+<td>{{with .Name}}{{.}}{{else}}<span class="muted">no name</span>{{end}}</td>
+<td class="mono">{{.Address}}</td>
+<td>{{.Network}}</td>
+<td class="mono muted">{{.MAC}}</td>
+<td>{{.Expires}}</td>
+<td class="actions">{{if .Fixed}}<span class="muted">fixed address</span>{{else}}<a href="/devices?fix={{.MAC}}#form">Give it a fixed address</a>{{end}}</td>
+</tr>{{end}}
+</tbody>
+</table>
+</div>
+{{else}}
+<p class="empty">No device has an address from the router right now.</p>
+{{end}}
+</section>
+
+<section aria-labelledby="fixedtitle">
+<h2 id="fixedtitle">Fixed addresses</h2>
+{{if .Fixed}}
+<div class="table">
+<table>
+<thead><tr><th>Name</th><th>Address</th><th>Network</th><th>Hardware address</th><th>Now</th><th><span class="sr-only">Actions</span></th></tr></thead>
+<tbody>
+{{range .Fixed}}<tr>
+<td>{{.Hostname}}</td>
+<td class="mono">{{.Address}}</td>
+<td>{{.Network}}</td>
+<td class="mono muted">{{.MAC}}</td>
+<td>{{if .Online}}<span class="ok">connected</span>{{else}}<span class="muted">not seen</span>{{end}}</td>
+<td class="actions">
+<a href="/devices?edit={{.Network}}:{{.Index}}#form">Edit</a>
+<form method="post" action="/devices" class="inline">
+<input type="hidden" name="csrf" value="{{$.CSRF}}">
+<input type="hidden" name="index" value="{{.Index}}">
+<input type="hidden" name="orig_name" value="{{.Hostname}}">
+<input type="hidden" name="orig_network" value="{{.Network}}">
+<button type="submit" name="action" value="remove" class="danger small" aria-label="Remove the fixed address of {{.Hostname}}">Remove</button>
+</form>
+</td>
+</tr>{{end}}
+</tbody>
+</table>
+</div>
+{{else}}
+<p class="empty">No device has a fixed address yet.</p>
+{{end}}
+</section>
+
+{{if .Networks}}
+<section id="form" aria-labelledby="formtitle">
+<h2 id="formtitle">{{if ge .DevForm.Index 0}}Change "{{.DevForm.OrigName}}"{{else}}Give a device a fixed address{{end}}</h2>
+<form method="post" action="/devices">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<input type="hidden" name="index" value="{{.DevForm.Index}}">
+<input type="hidden" name="orig_name" value="{{.DevForm.OrigName}}">
+<input type="hidden" name="orig_network" value="{{.DevForm.OrigNetwork}}">
+<div class="fields">
+<div>
+<label for="hostname">Name</label>
+<input id="hostname" name="hostname" type="text" value="{{.DevForm.Hostname}}" placeholder="living-room-tv" autocapitalize="off" required>
+<p class="help">It becomes the device's name on the network.</p>
+</div>
+<div>
+<label for="mac">Hardware (MAC) address</label>
+<input id="mac" name="mac" type="text" value="{{.DevForm.MAC}}" placeholder="52:54:00:12:34:56" autocapitalize="off" spellcheck="false" required>
+</div>
+</div>
+<div class="fields spaced">
+<div>
+<label for="network">Network</label>
+<select id="network" name="network">
+{{range .Networks}}<option value="{{.Name}}"{{if eq .Name $.DevForm.Network}} selected{{end}}>{{.Name}}{{if .Prefix.IsValid}} · {{.Prefix}}{{end}}</option>
+{{end}}</select>
+</div>
+<div>
+<label for="address">Address</label>
+<input id="address" name="address" type="text" inputmode="decimal" value="{{.DevForm.Address}}" placeholder="192.168.10.20" required>
+<p class="help">Outside the range the router hands out by itself.{{range .Networks}}{{if eq .Name $.DevForm.Network}}{{if .RangeStart.IsValid}} Here: not {{.RangeStart}} to {{.RangeEnd}}.{{end}}{{end}}{{end}}</p>
+</div>
+</div>
+<div class="buttons spaced">
+<button type="submit" name="action" value="review">Review</button>
+{{if ge .DevForm.Index 0}}<a href="/devices">Cancel</a>{{end}}
+</div>
+</form>
+</section>
+{{else}}
+<p class="notice">The router doesn't hand out addresses on any network yet (no <code>[dhcp.&lt;network&gt;]</code> section in router.toml), so there's nothing to fix an address on.</p>
+{{end}}
+{{template "bottom" .}}

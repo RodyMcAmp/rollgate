@@ -33,7 +33,9 @@ type Backend struct {
 	// Pending is the change waiting for confirmation, or nil.
 	Pending func() (*Pending, error)
 	// System is the kernel, uptime, memory, disk and interfaces.
-	System   func() (*sysinfo.Info, error)
+	System func() (*sysinfo.Info, error)
+	// Leases is the DHCP server's current leases.
+	Leases   func() ([]sysinfo.Lease, error)
 	Validate func(source []byte, w io.Writer) error
 	Diff     func(source []byte, w io.Writer) error
 	// Apply validates source, makes it router.toml and applies it with
@@ -55,12 +57,13 @@ type Request struct {
 
 // Response is every reply. OK false comes with Error, and Output says more.
 type Response struct {
-	OK      bool          `json:"ok"`
-	Output  string        `json:"output,omitempty"`
-	Error   string        `json:"error,omitempty"`
-	Config  string        `json:"config,omitempty"`  // GET /v1/config
-	Pending *Pending      `json:"pending,omitempty"` // GET /v1/pending, if a change waits
-	System  *sysinfo.Info `json:"system,omitempty"`  // GET /v1/system
+	OK      bool            `json:"ok"`
+	Output  string          `json:"output,omitempty"`
+	Error   string          `json:"error,omitempty"`
+	Config  string          `json:"config,omitempty"`  // GET /v1/config
+	Pending *Pending        `json:"pending,omitempty"` // GET /v1/pending, if a change waits
+	System  *sysinfo.Info   `json:"system,omitempty"`  // GET /v1/system
+	Leases  []sysinfo.Lease `json:"leases,omitempty"`  // GET /v1/leases
 }
 
 // Pending is a change waiting for confirmation (ADR 0010).
@@ -121,6 +124,14 @@ func Handler(b Backend) http.Handler {
 			return
 		}
 		reply(w, Response{OK: true, System: info})
+	})
+	mux.HandleFunc("GET /v1/leases", func(w http.ResponseWriter, r *http.Request) {
+		leases, err := b.Leases()
+		if err != nil {
+			reply(w, Response{Error: err.Error()})
+			return
+		}
+		reply(w, Response{OK: true, Leases: leases})
 	})
 	mux.Handle("POST /v1/validate", change(func(req Request, w io.Writer) error { return b.Validate([]byte(req.Config), w) }))
 	mux.Handle("POST /v1/diff", change(func(req Request, w io.Writer) error { return b.Diff([]byte(req.Config), w) }))

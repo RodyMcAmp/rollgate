@@ -26,6 +26,7 @@ type fakeAPI struct {
 	posts    []string     // "path connection" for each change asked
 	applied  string       // the last config applied
 	system   *sysinfo.Info
+	leases   []sysinfo.Lease
 }
 
 func (f *fakeAPI) Get(_ context.Context, path string) (api.Response, error) {
@@ -41,6 +42,8 @@ func (f *fakeAPI) Get(_ context.Context, path string) (api.Response, error) {
 		return api.Response{OK: true, Config: f.config}, nil
 	case "/v1/pending":
 		return api.Response{OK: true, Pending: f.pending}, nil
+	case "/v1/leases":
+		return api.Response{OK: true, Leases: f.leases}, nil
 	case "/v1/system":
 		if f.system == nil {
 			return api.Response{Error: "not in this test"}, nil
