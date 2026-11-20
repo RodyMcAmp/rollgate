@@ -16,7 +16,7 @@ var update = flag.Bool("update", false, "rewrite tests/edit/*/expected.toml from
 
 // jsonEdit is one edit in tests/edit/<case>/edits.json.
 type jsonEdit struct {
-	Op     string   `json:"op"` // add, change, remove, set
+	Op     string   `json:"op"` // add, insert, change, remove, set
 	Table  string   `json:"table"`
 	Index  int      `json:"index"`
 	ID     []any    `json:"id"`     // [key, value]
@@ -55,6 +55,8 @@ func (j jsonEdit) edit() Edit {
 	switch j.Op {
 	case "add":
 		return Add(j.Table, fields...)
+	case "insert":
+		return Insert(j.Table, j.Index, fields...)
 	case "change":
 		return Change(j.Table, j.Index, idKey, idValue, fields, j.Remove...)
 	case "remove":

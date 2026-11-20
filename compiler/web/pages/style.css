@@ -119,3 +119,6 @@ meter.meter:-moz-meter-sub-sub-optimum::-moz-meter-bar { background: var(--bad);
 .facts dd { margin: 0; overflow-wrap: anywhere; }
 .muted { color: var(--muted); }
 .nowrap { white-space: nowrap; overflow-wrap: normal; }
+label.check { display: flex; align-items: center; gap: 8px; font-weight: 400; min-height: 40px; margin: 0; }
+label.check input { width: 18px; height: 18px; accent-color: var(--accent); }
+.badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; background: #1C2633; color: var(--nav); }

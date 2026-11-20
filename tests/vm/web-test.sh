@@ -17,9 +17,11 @@
 #      reviewed, applied, kept; nftables has it, and router.toml keeps step 5's comment.
 #      A second one, undone with Undo, leaves router.toml as it was (matching generation 3).
 #   7. A fixed address added on the Devices page is kept, and dnsmasq has it.
-#   8. A change applied in the browser that cuts the browser off (lockout.toml)
+#   8. A network (VLAN 30 with DHCP) added on the Networks page is kept; the router has
+#      the interface and its address, and dnsmasq hands out addresses on it.
+#   9. A change applied in the browser that cuts the browser off (lockout.toml)
 #      reverts by itself, and the web UI comes back.
-#   9. A new password restarts the web UI and ends the old session.
+#  10. A new password restarts the web UI and ends the old session.
 #
 # Usage:  sudo tests/vm/web-test.sh build/rollgate-<date>.img
 # Env:    LOG_DIR, OVMF_CODE, OVMF_VARS as in boot-test.sh; PORT (default 2250: SSH,
@@ -258,7 +260,26 @@ out=$(web /devices)
 [[ $out == *"printer"* && $out == *"192.168.20.10"* ]] || die "the page doesn't list the fixed address: $out"
 log "  added on the page and kept; dnsmasq has it; the lease file is where the API reads it"
 
-log "8. a change that cuts off the web UI reverts by itself"
+log "8. add a network on the Networks page"
+out=$(web /networks)
+[[ $out == *"VLAN 20 on lan"* && $out == *'value="10"'* ]] || die "the networks page (want VLAN 10 suggested: 192.168.10.0/24 is free here): $out"
+out=$(web /networks --data-urlencode "csrf=$csrf" -d action=review -d name=guest -d parent=lan -d id=30 \
+  --data-urlencode "address=192.168.30.1/24" -d range_start=192.168.30.100 -d range_end=192.168.30.199 -d dhcp=on -d reach=internet)
+[[ $out == *"Review the new network"* ]] || die "the network's review: $out"
+c64=$(field config64 | sed 's/&#43;/+/g')
+out=$(web /settings --data-urlencode "csrf=$csrf" --data-urlencode "base=$(field base)" \
+  --data-urlencode "checked=$(field checked)" --data-urlencode "config64=$c64" -d action=apply)
+[[ $out == *" 303"* ]] || die "applying the network: $out"
+out=$(web /confirm --data-urlencode "csrf=$csrf")
+[[ $out == *"The new settings are kept"* ]] || die "keeping the network: $out"
+grep -q "Running: generation 6, confirmed" <<<"$(vm 'rollgate status')" || die "generation 6 isn't confirmed: $(vm 'rollgate status')"
+grep -q "192.168.30.1/24" <<<"$(vm 'ip -br addr show guest')" || die "the router has no guest interface with 192.168.30.1/24: $(vm 'ip -br addr')"
+vm 'grep -q "192.168.30.100" /etc/dnsmasq.conf' || die "dnsmasq doesn't hand out addresses on the guest network"
+out=$(web /networks)
+[[ $out == *"VLAN 30 on lan"* ]] || die "the page doesn't list the new network: $out"
+log "  added on the page and kept; the router has the guest VLAN and serves DHCP on it"
+
+log "9. a change that cuts off the web UI reverts by itself"
 check_config "$here/apply/lockout.toml"
 out=$(apply_config "$here/apply/lockout.toml")
 [[ $out == *" 303"* ]] || die "applying the lockout: $out"
@@ -274,15 +295,15 @@ done
 log "  the web UI came back by itself after $((SECONDS - start)) s"
 until vm true 2>/dev/null; do ((SECONDS - start < 180)) || die "no SSH after the revert"; sleep 2; done
 status=$(vm 'rollgate status')
-if ! grep -q "Running: generation 5, confirmed" <<<"$status" || ! grep -Eq "^ +6  reverted" <<<"$status"; then
+if ! grep -q "Running: generation 6, confirmed" <<<"$status" || ! grep -Eq "^ +7  reverted" <<<"$status"; then
   die "after the revert: $status"
 fi
 out=$(web /login --data-urlencode "password=$password")
 out=$(web /)
 [[ $out == *" 200"* && $out == *"all checks pass"* ]] || die "the status page after the revert: $out"
-log "  generation 6 reverted, generation 5 runs; logged in again"
+log "  generation 7 reverted, generation 6 runs; logged in again"
 
-log "9. a new password ends the old session"
+log "10. a new password ends the old session"
 vm "echo 'another long password' | rollgate web-password --stdin" >/dev/null || die "changing the password failed"
 out=$(web /)
 [[ $out == *" 303"* && $out == *"Location: /login"* ]] || die "the old session still works after a new password: $out"

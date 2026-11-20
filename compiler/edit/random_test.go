@@ -76,15 +76,17 @@ func randomFields(r *rand.Rand) []Field {
 // randomEdit picks an edit; for changes and removals it usually names a
 // real entry by a real key, as a form would.
 func randomEdit(r *rand.Rand, tree map[string]any) Edit {
-	switch r.Intn(4) {
-	case 0:
-		return Add(lists[r.Intn(len(lists))], randomFields(r)...)
-	case 3:
-		return Set(sections[r.Intn(len(sections))], randomFields(r)...)
-	}
 	table := lists[r.Intn(len(lists))]
 	entries, _, _ := list(tree, table, false)
 	index := r.Intn(len(entries) + 1)
+	switch r.Intn(5) {
+	case 0:
+		return Add(table, randomFields(r)...)
+	case 3:
+		return Set(sections[r.Intn(len(sections))], randomFields(r)...)
+	case 4:
+		return Insert(table, index, randomFields(r)...)
+	}
 	idKey, idValue := "name", any("nothing")
 	if index < len(entries) && r.Intn(5) > 0 {
 		if m, ok := entries[index].(map[string]any); ok && len(m) > 0 {
