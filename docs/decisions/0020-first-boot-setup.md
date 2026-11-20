@@ -1,6 +1,6 @@
 # 0020. First-boot setup: the config applies by itself, one password for the console and the web UI
 
-- Status: Proposed
+- Status: Accepted (by the maintainer, 2026-11-20)
 - Date: 2026-11-20
 
 ## Context
