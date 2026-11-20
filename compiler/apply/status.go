@@ -56,8 +56,8 @@ func Status(s System, configPath string) error {
 			return err
 		}
 		fmt.Fprintf(s.Out, "Waiting for confirmation: generation %d (applied %s). ", pending, when(g.Created))
-		if c, err := config.Parse(g.Source); err == nil {
-			left := g.Created.Add(time.Duration(c.Management.ConfirmTimeoutSeconds) * time.Second).Sub(s.Now())
+		if deadline, ok := revertDeadline(g); ok {
+			left := deadline.Sub(s.Now())
 			if left > 0 {
 				fmt.Fprintf(s.Out, "It reverts in %d s unless confirmed.\n", int(left.Round(time.Second)/time.Second))
 			} else {
@@ -98,6 +98,41 @@ func Status(s System, configPath string) error {
 		fmt.Fprintln(s.Out, "(* = running. rollgate rollback-config N goes back to generation N's config.)")
 	}
 	return nil
+}
+
+// Waiting is a change waiting for confirmation.
+type Waiting struct {
+	Generation int
+	// Deadline is when the revert timer undoes it; zero if its stored
+	// router.toml can't be read.
+	Deadline time.Time
+}
+
+// PendingChange returns the change waiting for confirmation, if there is one.
+// It changes nothing and needs no lock.
+func PendingChange(s System) (Waiting, bool, error) {
+	st := s.store()
+	n, ok, err := st.Pending()
+	if err != nil || !ok {
+		return Waiting{}, false, err
+	}
+	g, err := st.Load(n)
+	if err != nil {
+		return Waiting{}, false, err
+	}
+	w := Waiting{Generation: n}
+	w.Deadline, _ = revertDeadline(g)
+	return w, true, nil
+}
+
+// revertDeadline is when the revert timer undoes pending generation g: its
+// apply time plus its own confirm timeout.
+func revertDeadline(g Generation) (time.Time, bool) {
+	c, err := config.Parse(g.Source)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return g.Created.Add(time.Duration(c.Management.ConfirmTimeoutSeconds) * time.Second), true
 }
 
 func when(t time.Time) string { return t.UTC().Format("2006-01-02 15:04 UTC") }

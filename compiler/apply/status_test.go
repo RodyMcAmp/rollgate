@@ -79,6 +79,10 @@ func TestStatus(t *testing.T) {
 		"   1  pending    2026-11-18 12:00 UTC",
 		"   0  base       2026-11-18 12:00 UTC")
 
+	if p, ok, err := PendingChange(s); err != nil || !ok || p.Generation != 1 || !p.Deadline.Equal(start.Add(120*time.Second)) {
+		t.Errorf("PendingChange: %+v %v %v, want generation 1 reverting at %s", p, ok, err, start.Add(120*time.Second))
+	}
+
 	s.Now = func() time.Time { return start.Add(130 * time.Second) }
 	wantLines(t, status(t, s), "Its revert is overdue by 10 s")
 
@@ -91,6 +95,9 @@ func TestStatus(t *testing.T) {
 		"Running: generation 1, confirmed (applied 2026-11-18 12:00 UTC).",
 		"/etc/rollgate/router.toml: has changes that aren't applied",
 		" *   1  confirmed")
+	if _, ok, err := PendingChange(s); ok || err != nil {
+		t.Errorf("PendingChange after confirming: %v %v, want nothing pending", ok, err)
+	}
 	if strings.Contains(got, "Waiting") {
 		t.Errorf("nothing is pending:\n%s", got)
 	}

@@ -138,4 +138,11 @@ func Status(s System) error {
 	return nil
 }
 
+// RebootPending reports whether a rollback waits for a reboot: the running
+// system is no longer @ (the test Status uses for "Reboot to start").
+func RebootPending(s System) bool {
+	m, err := rootMount(s)
+	return err == nil && m.subvol == "/@previous"
+}
+
 func at(t time.Time) string { return t.UTC().Format("2006-01-02 15:04 UTC") }

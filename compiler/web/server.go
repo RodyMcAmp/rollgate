@@ -17,7 +17,7 @@ import (
 	"github.com/RodyMcAmp/rollgate/compiler/api"
 )
 
-//go:embed pages/*.html pages/style.css
+//go:embed pages/*.html pages/style.css pages/countdown.js
 var pages embed.FS
 
 var tmpl = template.Must(template.ParseFS(pages, "pages/*.html"))
@@ -48,6 +48,17 @@ type Server struct {
 	mu       sync.Mutex
 	sessions map[string]*session
 	failures map[string][]time.Time // by client IP
+	// applied is when this server last asked for an apply. A confirm must
+	// come over a connection opened after it (see confirm).
+	applied time.Time
+}
+
+type connOpenedKey struct{}
+
+// ConnContext is for http.Server.ConnContext: it records when each
+// connection was opened, which confirm checks.
+func (s *Server) ConnContext(ctx context.Context, _ net.Conn) context.Context {
+	return context.WithValue(ctx, connOpenedKey{}, s.now())
 }
 
 type session struct {
@@ -62,10 +73,24 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /login", s.loginPage)
 	mux.HandleFunc("POST /login", s.login)
 	mux.HandleFunc("POST /logout", s.logout)
-	mux.HandleFunc("GET /style.css", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", "max-age=3600")
-		http.ServeFileFS(w, r, pages, "pages/style.css")
-	})
+	mux.HandleFunc("GET /settings", s.settingsPage)
+	mux.HandleFunc("POST /settings", s.settings)
+	mux.HandleFunc("GET /confirm", s.confirmPage)
+	mux.HandleFunc("POST /confirm", s.confirm)
+	mux.HandleFunc("POST /revert", s.revert)
+	mux.HandleFunc("GET /devices", s.devicesPage)
+	mux.HandleFunc("POST /devices", s.devices)
+	mux.HandleFunc("GET /forwards", s.forwardsPage)
+	mux.HandleFunc("POST /forwards", s.forwards)
+	mux.HandleFunc("GET /updates", s.updatesPage)
+	mux.HandleFunc("POST /updates/update", s.update)
+	mux.HandleFunc("POST /updates/rollback", s.rollback)
+	for _, f := range []string{"style.css", "countdown.js"} {
+		mux.HandleFunc("GET /"+f, func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Cache-Control", "max-age=3600")
+			http.ServeFileFS(w, r, pages, "pages/"+f)
+		})
+	}
 	return headers(mux)
 }
 
@@ -197,10 +222,85 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
-func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
+// posted returns the session of a form that changes something, or writes a
+// refusal and returns nil: the form must carry its session's CSRF token.
+func (s *Server) posted(w http.ResponseWriter, r *http.Request) *session {
+	r.Body = http.MaxBytesReader(w, r.Body, api.MaxBody)
 	sess := s.current(r)
 	if sess == nil || subtle.ConstantTimeCompare([]byte(r.PostFormValue("csrf")), []byte(sess.csrf)) != 1 {
 		http.Error(w, "This form expired or didn't come from this router's page. Reload the page and try again.", http.StatusForbidden)
+		return nil
+	}
+	return sess
+}
+
+// page is what every page's template gets. Each page fills its own fields.
+type page struct {
+	Title, CSRF, Error, Notice string
+	// Pending is the change waiting for confirmation, if any: every page
+	// shows it. Left is the seconds until it reverts by itself.
+	Pending *api.Pending
+	Left    int
+
+	HealthOK       bool   // status
+	Health, Status string // status, updates
+
+	Config  string // settings: the text in the editor
+	Base    string // settings: digest of the router's router.toml the text started from
+	Checked string // settings: digest of the text whose check passed
+	Changes string // settings: router.toml diff
+	Files   string // settings: what changes in the system files
+	Output  string // what a request printed
+	Valid   bool   // settings: the check passed, so Apply is offered
+	Done    string // result: what happened
+
+	Nav string // the menu entry this page belongs to
+
+	Forwards  []forwardRow // port forwarding
+	Devices   []device     // port forwarding: fixed-address devices to choose from
+	Form      forwardForm  // port forwarding: the add or edit form
+	Removing  string       // port forwarding: the name of the forward being removed
+	Reviewing bool         // a form's change is shown for review
+	Config64  string       // the reviewed router.toml, for the Apply form
+	Advanced  bool         // the error suggests the Advanced editor
+
+	System *sysView // overview: kernel, uptime, memory, disk, interfaces
+
+	Networks []network  // devices: networks with DHCP
+	Fixed    []fixedRow // devices: fixed addresses
+	Online   []leaseRow // devices: current DHCP leases
+	DevForm  deviceForm // devices: the add or edit form
+}
+
+// newPage starts a page for a logged-in session, with any pending change.
+func (s *Server) newPage(ctx context.Context, sess *session, title string) *page {
+	p := &page{Title: title, CSRF: sess.csrf}
+	resp, err := s.API.Get(ctx, "/v1/pending")
+	switch {
+	case err != nil:
+		p.Error = err.Error()
+	case !resp.OK:
+		p.Error = resp.Error
+	case resp.Pending != nil:
+		p.Pending = resp.Pending
+		if !resp.Pending.Deadline.IsZero() {
+			p.Left = max(0, int(resp.Pending.Deadline.Sub(s.now()).Round(time.Second)/time.Second))
+		}
+	}
+	return p
+}
+
+// loggedIn returns the session, or redirects to the login page and returns nil.
+func (s *Server) loggedIn(w http.ResponseWriter, r *http.Request) *session {
+	sess := s.current(r)
+	if sess == nil {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+	}
+	return sess
+}
+
+func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
+	if s.posted(w, r) == nil {
 		return
 	}
 	c, _ := r.Cookie(cookieName)
@@ -214,26 +314,32 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 
 // status is the start page: the health checks and rollgate status, from the API.
 func (s *Server) status(w http.ResponseWriter, r *http.Request) {
-	sess := s.current(r)
+	sess := s.loggedIn(w, r)
 	if sess == nil {
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
-	data := map[string]any{"CSRF": sess.csrf}
+	p := s.newPage(r.Context(), sess, "overview")
+	p.Nav = "status"
+	s.loadSystem(r.Context(), p)
 	if h, err := s.API.Get(r.Context(), "/v1/health"); err != nil {
-		data["Error"] = err.Error()
+		p.Error = err.Error()
 	} else {
-		data["HealthOK"], data["Health"] = h.OK, h.Output
+		p.HealthOK, p.Health = h.OK, h.Output
 	}
-	if st, err := s.API.Get(r.Context(), "/v1/status"); err != nil {
-		data["Error"] = err.Error()
+	s.loadStatus(r.Context(), p)
+	s.render(w, http.StatusOK, "status.html", p)
+}
+
+// loadStatus puts rollgate status on p.
+func (s *Server) loadStatus(ctx context.Context, p *page) {
+	if st, err := s.API.Get(ctx, "/v1/status"); err != nil {
+		p.Error = err.Error()
 	} else {
-		data["Status"] = st.Output
+		p.Status = st.Output
 		if !st.OK {
-			data["Error"] = st.Error
+			p.Error = st.Error
 		}
 	}
-	s.render(w, http.StatusOK, "status.html", data)
 }
 
 func randomToken() string {

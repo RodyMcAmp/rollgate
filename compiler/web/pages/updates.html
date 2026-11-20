@@ -1,0 +1,26 @@
+{{template "top" .}}
+<h1>Updates</h1>
+<p class="lede">New releases of rollgate, and the way back to the one before.</p>
+<section>
+<h2>Update to the newest release</h2>
+<p>The router downloads the newest rollgate release and installs it into a copy of its system; the running system isn't changed.
+Then it restarts into the new release once, as a trial. If the trial's health checks don't pass within 5 minutes, it goes back to this release by itself.</p>
+<p>Downloading can take several minutes. Keep this page open until it answers; the router then restarts and is away for a few minutes. Your settings are kept.</p>
+<form method="post" action="/updates/update">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<button type="submit">Update now</button>
+</form>
+</section>
+<section>
+<h2>Go back to the previous release</h2>
+<p>After an update, the release from before it is kept. Going back makes it the system again and restarts the router into it. The release you leave is kept in turn, so you can come back to it the same way.</p>
+<form method="post" action="/updates/rollback">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<button type="submit" class="secondary">Go back and restart</button>
+</form>
+</section>
+<section>
+<h2>Status</h2>
+<pre>{{.Status}}</pre>
+</section>
+{{template "bottom" .}}

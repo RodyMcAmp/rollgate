@@ -11,10 +11,18 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/RodyMcAmp/rollgate/compiler/sysinfo"
 )
 
 // fake records what the backend was asked to do.
-type fake struct{ calls []string }
+type fake struct {
+	calls   []string
+	pending *Pending // set by apply
+}
+
+var deadline = time.Date(2026, 11, 19, 12, 2, 0, 0, time.UTC)
 
 func (f *fake) backend() Backend {
 	note := func(format string, args ...any) { f.calls = append(f.calls, fmt.Sprintf(format, args...)) }
@@ -24,7 +32,14 @@ func (f *fake) backend() Backend {
 			fmt.Fprintln(w, "FAIL  20-wan")
 			return errors.New("not every health check passes")
 		},
-		Config: func() ([]byte, error) { return []byte("schema_version = 1\n"), nil },
+		Config:  func() ([]byte, error) { return []byte("schema_version = 1\n"), nil },
+		Pending: func() (*Pending, error) { return f.pending, nil },
+		Leases: func() ([]sysinfo.Lease, error) {
+			return []sysinfo.Lease{{MAC: "52:54:00:aa:bb:01", IPv4: "192.168.10.123", Hostname: "phone"}}, nil
+		},
+		System: func() (*sysinfo.Info, error) {
+			return &sysinfo.Info{Kernel: "6.12.10-arch1-1", Interfaces: []sysinfo.Interface{{Name: "wan", State: "up"}}}, nil
+		},
 		Validate: func(source []byte, w io.Writer) error {
 			note("validate %q", source)
 			return nil
@@ -32,6 +47,7 @@ func (f *fake) backend() Backend {
 		Diff: func(source []byte, w io.Writer) error { note("diff %q", source); return nil },
 		Apply: func(source []byte, connection string, w io.Writer) error {
 			note("apply %q from %q", source, connection)
+			f.pending = &Pending{Generation: 3, Deadline: deadline}
 			fmt.Fprintln(w, "Applied generation 3.")
 			return nil
 		},
@@ -92,8 +108,20 @@ func TestRequests(t *testing.T) {
 	if code, r := call(t, c, "GET", "/v1/config", ""); code != 200 || r.Config != "schema_version = 1\n" {
 		t.Errorf("config: %d %+v", code, r)
 	}
+	if code, r := call(t, c, "GET", "/v1/system", ""); code != 200 || r.System == nil || r.System.Kernel != "6.12.10-arch1-1" || len(r.System.Interfaces) != 1 {
+		t.Errorf("system: %d %+v", code, r)
+	}
+	if code, r := call(t, c, "GET", "/v1/leases", ""); code != 200 || len(r.Leases) != 1 || r.Leases[0].Hostname != "phone" {
+		t.Errorf("leases: %d %+v", code, r)
+	}
+	if code, r := call(t, c, "GET", "/v1/pending", ""); code != 200 || !r.OK || r.Pending != nil {
+		t.Errorf("pending, with nothing pending: %d %+v", code, r)
+	}
 	if code, r := call(t, c, "POST", "/v1/apply", `{"config": "x = 1", "connection": "192.168.50.1 51234"}`); code != 200 || r.Output != "Applied generation 3.\n" {
 		t.Errorf("apply: %d %+v", code, r)
+	}
+	if code, r := call(t, c, "GET", "/v1/pending", ""); code != 200 || r.Pending == nil || r.Pending.Generation != 3 || !r.Pending.Deadline.Equal(deadline) {
+		t.Errorf("pending after an apply: %d %+v", code, r)
 	}
 	for _, body := range []string{`{"connection": "192.168.50.1 51240"}`, ""} {
 		call(t, c, "POST", "/v1/confirm", body)

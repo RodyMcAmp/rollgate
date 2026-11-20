@@ -81,9 +81,15 @@ func (f Files) Compare(root string) ([]Change, error) {
 	return changes, nil
 }
 
-// unifiedDiff renders a unified diff with three lines of context. Generated
-// files are small, so a simple longest-common-subsequence table is enough.
+// unifiedDiff renders a unified diff of an installed and a compiled file.
 func unifiedDiff(path string, old, new []byte) string {
+	return TextDiff("installed /"+path, "compiled /"+path, old, new)
+}
+
+// TextDiff renders a unified diff with three lines of context, labelled
+// oldName and newName. Generated files and
+// router.toml are small, so a simple longest-common-subsequence table is enough.
+func TextDiff(oldName, newName string, old, new []byte) string {
 	a, b := lines(old), lines(new)
 	n, m := len(a), len(b)
 	lcs := make([][]int, n+1)
@@ -122,7 +128,7 @@ func unifiedDiff(path string, old, new []byte) string {
 	}
 
 	var out strings.Builder
-	fmt.Fprintf(&out, "--- installed /%s\n+++ compiled /%s\n", path, path)
+	fmt.Fprintf(&out, "--- %s\n+++ %s\n", oldName, newName)
 	const context = 3
 	for k := 0; k < len(ops); {
 		if ops[k].kind == ' ' {

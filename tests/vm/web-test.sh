@@ -7,9 +7,19 @@
 #      TLS has the fingerprint web-password printed.
 #   3. Not logged in, / goes to the login page; a wrong password gets no session; the
 #      right one gets a Secure, HttpOnly, SameSite=Strict cookie, and the status page
-#      shows the health checks and the release. Port 80 redirects to HTTPS.
+#      shows the health checks, the release, the kernel version and the LAN address.
+#      Port 80 redirects to HTTPS.
 #   4. From WAN, 443 is unreachable (firewall), and the server runs unprivileged.
-#   5. A new password restarts the web UI and ends the old session.
+#   5. router.toml edited in the browser: the check shows the change, Apply makes it
+#      pending, a confirm over a connection opened before the apply is refused, and
+#      one over a new connection keeps it.
+#   6. A port forward added on the Port forwarding page (compiler/edit, ADR 0016):
+#      reviewed, applied, kept; nftables has it, and router.toml keeps step 5's comment.
+#      A second one, undone with Undo, leaves router.toml as it was (matching generation 3).
+#   7. A fixed address added on the Devices page is kept, and dnsmasq has it.
+#   8. A change applied in the browser that cuts the browser off (lockout.toml)
+#      reverts by itself, and the web UI comes back.
+#   9. A new password restarts the web UI and ends the old session.
 #
 # Usage:  sudo tests/vm/web-test.sh build/rollgate-<date>.img
 # Env:    LOG_DIR, OVMF_CODE, OVMF_VARS as in boot-test.sh; PORT (default 2250: SSH,
@@ -90,7 +100,7 @@ until vm true 2>/dev/null; do
   kill -0 "$qemu_pid" 2>/dev/null || die "QEMU exited (serial log: $serial)"
   sleep 3
 done
-# Header names arrive in lowercase over HTTP/2 and capitalized over HTTP/1.1.
+# Header names are matched without case, as HTTP defines them.
 shopt -s nocasematch
 # web PATH [curl options]: one HTTPS request from the LAN; prints the headers and body.
 web() { local path=$1; shift; curl -sk -m 15 -D - -b "$work/cookies" -c "$work/cookies" "$@" "https://127.0.0.1:$https_port$path"; }
@@ -125,6 +135,9 @@ for flag in Secure HttpOnly SameSite=Strict; do
 done
 out=$(web /)
 [[ $out == *" 200"* && $out == *"all checks pass"* && $out == *"Release: "* ]] || die "the status page: $out"
+kernel=$(vm 'uname -r')
+[[ -n $kernel && $out == *"$kernel"* && $out == *"10.0.2.15/24"* && $out == *"Memory"* ]] ||
+  die "the overview doesn't show the kernel ($kernel), the LAN address or memory: $out"
 out=$(curl -s -m 10 -D - -o /dev/null "http://127.0.0.1:$http_port/x")
 [[ $out == *" 301"* && $out == *"Location: https://127.0.0.1/x"* ]] || die "port 80 doesn't redirect to HTTPS: $out"
 log "  login page; wrong password refused; session cookie Secure, HttpOnly, SameSite=Strict; status page; 80 redirects"
@@ -137,7 +150,139 @@ user=$(vm 'ps -o user= -o args= -C rollgate' | awk '$3 == "web" { print $1 }')
 [[ -n $user && $user != root ]] || die "rollgate web runs as '${user:-nothing}', want an unprivileged user"
 log "  unreachable from WAN; runs as $user"
 
-log "5. a new password ends the old session"
+# field NAME: the value of the hidden form field NAME on the page in $out.
+field() { sed -n "s/.*name=\"$1\" value=\"\([^\"]*\)\".*/\1/p" <<<"$out" | head -n 1; }
+# check_config FILE: check FILE in the settings editor; sets csrf, base and checked.
+check_config() {
+  out=$(web /settings)
+  csrf=$(field csrf) base=$(field base)
+  [[ -n $csrf && -n $base ]] || die "the settings page has no form: $out"
+  out=$(web /settings --data-urlencode "csrf=$csrf" --data-urlencode "base=$base" \
+    --data-urlencode "config@$1" -d action=check)
+  checked=$(field checked)
+  [[ -n $checked && $out == *'value="apply"'* ]] || die "checking $1 offers no Apply: $out"
+}
+apply_config() {
+  web /settings --data-urlencode "csrf=$csrf" --data-urlencode "base=$(field base)" \
+    --data-urlencode "checked=$checked" --data-urlencode "config@$1" -d action=apply
+}
+
+log "5. edit router.toml in the browser: check, apply, confirm from a new connection"
+vm 'cat /etc/rollgate/router.toml' > "$work/edited.toml"
+echo "# changed in the browser" >> "$work/edited.toml"
+check_config "$work/edited.toml"
+[[ $out == *"+# changed in the browser"* || $out == *"&#43;# changed in the browser"* ]] || die "the check doesn't show the change: $out"
+[[ $out == HTTP/1.1* ]] || die "want HTTP/1.1 (each request on its own connection): $out"
+# A connection opened before the apply sends its headers now and its body after
+# the apply: its confirm must be refused, because it doesn't prove that the
+# router still accepts new connections.
+session=$(awk '$6 == "rollgate_session" { print $7 }' "$work/cookies")
+body="csrf=$(printf %s "$csrf" | sed 's/=/%3D/g')"
+mkfifo "$work/old.in"
+openssl s_client -quiet -connect "127.0.0.1:$https_port" <"$work/old.in" >"$work/old.out" 2>/dev/null &
+exec 3>"$work/old.in"
+printf 'POST /confirm HTTP/1.1\r\nHost: 127.0.0.1\r\nCookie: rollgate_session=%s\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: %d\r\n\r\n' \
+  "$session" "${#body}" >&3
+sleep 2
+out=$(apply_config "$work/edited.toml")
+[[ $out == *" 303"* && $out == *"Location: /confirm"* && $out == *"Connection: close"* ]] || die "apply: $out"
+grep -q "Waiting for confirmation: generation 2" <<<"$(vm 'rollgate status')" || die "no generation 2 waiting after the apply: $(vm 'rollgate status')"
+printf '%s' "$body" >&3
+for _ in $(seq 20); do grep -q "^HTTP/1.1" "$work/old.out" && break; sleep 0.5; done
+exec 3>&-
+grep -q "^HTTP/1.1 409" "$work/old.out" || die "a confirm over a connection opened before the apply wasn't refused: $(head -c 2000 "$work/old.out")"
+grep -q "Waiting for confirmation: generation 2" <<<"$(vm 'rollgate status')" || die "the refused confirm confirmed something"
+log "  apply went through; a confirm over a connection opened before it was refused"
+out=$(web /confirm)
+[[ $out == *"Keep these settings"* ]] || die "the confirm page: $out"
+out=$(web /confirm --data-urlencode "csrf=$csrf")
+[[ $out == *" 200"* && $out == *"The new settings are kept"* ]] || die "confirm: $out"
+grep -q "Running: generation 2, confirmed" <<<"$(vm 'rollgate status')" || die "generation 2 isn't confirmed: $(vm 'rollgate status')"
+vm 'grep -q "^# changed in the browser" /etc/rollgate/router.toml' || die "router.toml doesn't have the browser's edit"
+log "  confirmed from a new connection; router.toml has the edit"
+
+log "6. add a port forward on the Port forwarding page"
+out=$(web /forwards)
+[[ $out == *"No forwards"* ]] || die "the port forwarding page: $out"
+out=$(web /forwards --data-urlencode "csrf=$csrf" -d action=review -d index=-1 --data-urlencode "name=web server" \
+  -d protocol=tcp -d wan_port=8080 -d address=10.0.2.50 -d device_port=80)
+[[ $out == *"Review the change"* ]] || die "the forward's review: $out"
+# html/template writes + in attributes as &#43;.
+c64=$(field config64 | sed 's/&#43;/+/g')
+[[ -n $c64 ]] || die "the review offers no Apply: $out"
+out=$(web /settings --data-urlencode "csrf=$csrf" --data-urlencode "base=$(field base)" \
+  --data-urlencode "checked=$(field checked)" --data-urlencode "config64=$c64" -d action=apply)
+[[ $out == *" 303"* && $out == *"Location: /confirm"* ]] || die "applying the forward: $out"
+out=$(web /confirm --data-urlencode "csrf=$csrf")
+[[ $out == *"The new settings are kept"* ]] || die "keeping the forward: $out"
+grep -q "Running: generation 3, confirmed" <<<"$(vm 'rollgate status')" || die "generation 3 isn't confirmed: $(vm 'rollgate status')"
+grep -q "10.0.2.50:80" <<<"$(vm 'nft list ruleset')" || die "the firewall has no forward to 10.0.2.50:80"
+vm 'grep -q "^# changed in the browser" /etc/rollgate/router.toml' || die "the form's edit lost the comment from step 5"
+out=$(web /forwards)
+[[ $out == *"web server"* && $out == *"10.0.2.50:80"* ]] || die "the page doesn't list the new forward: $out"
+log "  added on the page, kept, and in the firewall; router.toml kept its comment"
+# Another one, undone: Undo puts router.toml back as it was.
+out=$(web /forwards --data-urlencode "csrf=$csrf" -d action=review -d index=-1 --data-urlencode "name=undo me" \
+  -d protocol=udp -d wan_port=9999 -d address=10.0.2.51)
+c64=$(field config64 | sed 's/&#43;/+/g')
+out=$(web /settings --data-urlencode "csrf=$csrf" --data-urlencode "base=$(field base)" \
+  --data-urlencode "checked=$(field checked)" --data-urlencode "config64=$c64" -d action=apply)
+[[ $out == *" 303"* ]] || die "applying the second forward: $out"
+out=$(web /revert --data-urlencode "csrf=$csrf")
+[[ $out == *"The previous settings are back"* && $out == *"router.toml is back as it was"* ]] || die "Undo: $out"
+vm 'grep -q "undo me" /etc/rollgate/router.toml' && die "Undo left the undone forward in router.toml"
+vm 'grep -q "web server" /etc/rollgate/router.toml' || die "Undo lost the kept forward from router.toml"
+status=$(vm 'rollgate status')
+if ! grep -q "Running: generation 3, confirmed" <<<"$status" || ! grep -Eq "^ +4  reverted" <<<"$status" ||
+  ! grep -q "router.toml: matches generation 3" <<<"$status"; then
+  die "after Undo: $status"
+fi
+log "  Undo of a second forward: generation 4 reverted, and router.toml matches generation 3 again"
+
+log "7. give a device a fixed address on the Devices page"
+vm 'test -f /var/lib/misc/dnsmasq.leases' || die "no lease file where the API reads it (/var/lib/misc/dnsmasq.leases)"
+out=$(web /devices)
+[[ $out == *"No device has a fixed address yet"* && $out == *'value="iot"'* ]] || die "the devices page: $out"
+out=$(web /devices --data-urlencode "csrf=$csrf" -d action=review -d index=-1 -d network=iot \
+  -d hostname=printer -d mac=52:54:00:12:34:56 -d address=192.168.20.10)
+[[ $out == *"Review the change"* ]] || die "the device's review: $out"
+c64=$(field config64 | sed 's/&#43;/+/g')
+out=$(web /settings --data-urlencode "csrf=$csrf" --data-urlencode "base=$(field base)" \
+  --data-urlencode "checked=$(field checked)" --data-urlencode "config64=$c64" -d action=apply)
+[[ $out == *" 303"* ]] || die "applying the fixed address: $out"
+out=$(web /confirm --data-urlencode "csrf=$csrf")
+[[ $out == *"The new settings are kept"* ]] || die "keeping the fixed address: $out"
+grep -q "Running: generation 5, confirmed" <<<"$(vm 'rollgate status')" || die "generation 5 isn't confirmed: $(vm 'rollgate status')"
+vm 'grep -q "^dhcp-host=52:54:00:12:34:56,192.168.20.10,printer$" /etc/dnsmasq.conf' || die "dnsmasq has no fixed address for the printer"
+out=$(web /devices)
+[[ $out == *"printer"* && $out == *"192.168.20.10"* ]] || die "the page doesn't list the fixed address: $out"
+log "  added on the page and kept; dnsmasq has it; the lease file is where the API reads it"
+
+log "8. a change that cuts off the web UI reverts by itself"
+check_config "$here/apply/lockout.toml"
+out=$(apply_config "$here/apply/lockout.toml")
+[[ $out == *" 303"* ]] || die "applying the lockout: $out"
+start=$SECONDS
+if curl -sk -m 5 -o /dev/null "https://127.0.0.1:$https_port/login"; then
+  die "a new connection to the web UI still worked after the lockout was applied"
+fi
+log "  new connections to the web UI are refused"
+until curl -sk -m 5 -o /dev/null "https://127.0.0.1:$https_port/login"; do
+  ((SECONDS - start < 120)) || die "the web UI didn't come back within 120 s of a 30 s confirm timeout"
+  sleep 2
+done
+log "  the web UI came back by itself after $((SECONDS - start)) s"
+until vm true 2>/dev/null; do ((SECONDS - start < 180)) || die "no SSH after the revert"; sleep 2; done
+status=$(vm 'rollgate status')
+if ! grep -q "Running: generation 5, confirmed" <<<"$status" || ! grep -Eq "^ +6  reverted" <<<"$status"; then
+  die "after the revert: $status"
+fi
+out=$(web /login --data-urlencode "password=$password")
+out=$(web /)
+[[ $out == *" 200"* && $out == *"all checks pass"* ]] || die "the status page after the revert: $out"
+log "  generation 6 reverted, generation 5 runs; logged in again"
+
+log "9. a new password ends the old session"
 vm "echo 'another long password' | rollgate web-password --stdin" >/dev/null || die "changing the password failed"
 out=$(web /)
 [[ $out == *" 303"* && $out == *"Location: /login"* ]] || die "the old session still works after a new password: $out"

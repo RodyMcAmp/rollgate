@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -18,6 +19,7 @@ import (
 	"github.com/RodyMcAmp/rollgate/compiler/compile"
 	"github.com/RodyMcAmp/rollgate/compiler/config"
 	"github.com/RodyMcAmp/rollgate/compiler/health"
+	"github.com/RodyMcAmp/rollgate/compiler/sysinfo"
 	"github.com/RodyMcAmp/rollgate/compiler/update"
 	"github.com/RodyMcAmp/rollgate/compiler/web"
 )
@@ -53,6 +55,32 @@ func apiCmd(args []string, stderr io.Writer) int {
 	return 0
 }
 
+// interfaceAddrs lists an interface's addresses, IPv4 first, without the
+// IPv6 link-local ones every interface has.
+func interfaceAddrs(name string) []string {
+	ifc, err := net.InterfaceByName(name)
+	if err != nil {
+		return nil
+	}
+	addrs, err := ifc.Addrs()
+	if err != nil {
+		return nil
+	}
+	var v4, v6 []string
+	for _, a := range addrs {
+		ipn, ok := a.(*net.IPNet)
+		if !ok || ipn.IP.IsLinkLocalUnicast() {
+			continue
+		}
+		if ipn.IP.To4() != nil {
+			v4 = append(v4, ipn.String())
+		} else {
+			v6 = append(v6, ipn.String())
+		}
+	}
+	return append(v4, v6...)
+}
+
 // apiBackend is the router behind each API request: the CLI commands' code.
 func apiBackend() api.Backend {
 	sys := func(w io.Writer, connection string) apply.System {
@@ -61,6 +89,7 @@ func apiBackend() api.Backend {
 		return s
 	}
 	invalid := errors.New("invalid config; nothing was changed")
+	undo := webUndo{root: "/", config: config.DefaultPath}
 	return api.Backend{
 		Status: func(w io.Writer) error { return status(sys(w, ""), w) },
 		Health: func(w io.Writer) error {
@@ -72,6 +101,19 @@ func apiBackend() api.Backend {
 			return err
 		},
 		Config: func() ([]byte, error) { return os.ReadFile(config.DefaultPath) },
+		Pending: func() (*api.Pending, error) {
+			p, ok, err := apply.PendingChange(sys(io.Discard, ""))
+			if err != nil || !ok {
+				return nil, err
+			}
+			return &api.Pending{Generation: p.Generation, Deadline: p.Deadline}, nil
+		},
+		Leases: func() ([]sysinfo.Lease, error) { return sysinfo.ReadLeases(sysinfo.LeaseFile) },
+		System: func() (*sysinfo.Info, error) {
+			info := sysinfo.Read("/", interfaceAddrs)
+			info.Release, _ = update.RunningRelease("/")
+			return &info, nil
+		},
 		Validate: func(source []byte, w io.Writer) error {
 			if _, ok := parse(source, "router.toml", w); !ok {
 				return errors.New("invalid config")
@@ -91,18 +133,49 @@ func apiBackend() api.Backend {
 			if _, ok := parse(source, "router.toml", w); !ok {
 				return invalid
 			}
-			// router.toml is the user's file, like an edit from the CLI: if the
-			// apply is refused or reverted, the edit stays, and rollgate status
-			// says it isn't applied.
-			if err := writeConfig(config.DefaultPath, source); err != nil {
+			// The old router.toml is kept, so that Undo in the web UI can put
+			// it back (undo.go).
+			return webApply(sys(w, connection), undo, source, w)
+		},
+		Confirm: func(connection string, w io.Writer) error {
+			s := sys(w, connection)
+			n, _, pending := pendingSource(s)
+			if err := apply.Confirm(s); err != nil {
 				return err
 			}
-			return applyFile(sys(w, connection), config.DefaultPath, w)
+			if pending {
+				undo.forget(n)
+			}
+			return nil
 		},
-		Confirm:  func(connection string, w io.Writer) error { return apply.Confirm(sys(w, connection)) },
-		Revert:   func(w io.Writer) error { return apply.Revert(sys(w, ""), apply.ByHand) },
-		Update:   func(date string, w io.Writer) error { return updateRouter(sys(w, ""), date) },
-		Rollback: func(w io.Writer) error { return update.Rollback(updateSystem(sys(w, ""))) },
+		Revert: func(w io.Writer) error {
+			s := sys(w, "")
+			n, applied, pending := pendingSource(s)
+			if err := apply.Revert(s, apply.ByHand); err != nil {
+				return err
+			}
+			if !pending {
+				return nil
+			}
+			return undo.restore(n, applied, w)
+		},
+		Update: func(date string, w io.Writer) error { return updateRouter(sys(w, ""), date) },
+		// Like update, a rollback from the web UI reboots by itself: there is
+		// no shell to type reboot in.
+		Rollback: func(w io.Writer) error {
+			u := updateSystem(sys(w, ""))
+			if err := update.Rollback(u); err != nil {
+				return err
+			}
+			if !update.RebootPending(u) {
+				return nil
+			}
+			fmt.Fprintln(w, "Rebooting now.")
+			if out, err := u.Run.Run("systemctl", "reboot"); err != nil {
+				return fmt.Errorf("the rollback is done, but rebooting failed (%v: %s); reboot to start it", err, out)
+			}
+			return nil
+		},
 	}
 }
 
