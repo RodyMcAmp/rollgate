@@ -1,0 +1,116 @@
+{{template "top" .}}
+<h1>Networks</h1>
+<p class="lede">The router's networks, and what each may reach. A separate network, for guests or smart-home gadgets, keeps those devices away from your computers.</p>
+
+{{if .Reviewing}}
+<section aria-labelledby="review">
+<h2 id="review">Review the new network</h2>
+{{with .Output}}<pre>{{.}}</pre>{{end}}
+{{if .Valid}}
+<p class="hint">This is the change to router.toml. Nothing has changed on the router yet.</p>
+{{if .Changes}}<pre class="diff">{{range .ChangeLines}}<span class="{{.Class}}">{{.Text}}</span>
+{{end}}</pre>{{end}}
+<details>
+<summary>What changes in the router's system files</summary>
+<pre class="diff">{{.Files}}</pre>
+</details>
+{{if .Pending}}
+<p class="notice">Another change is waiting to be kept or undone. Do that first (in the bar at the top), then apply this one.</p>
+{{else}}
+<form method="post" action="/settings" class="buttons">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<input type="hidden" name="base" value="{{.Base}}">
+<input type="hidden" name="checked" value="{{.Checked}}">
+<input type="hidden" name="config64" value="{{.Config64}}">
+<button type="submit" name="action" value="apply">Apply</button>
+<a href="/networks">Cancel</a>
+</form>
+<p class="help">After Apply, press Keep in the bar at the top.</p>
+{{end}}
+{{end}}
+</section>
+{{end}}
+
+<section aria-labelledby="list">
+<h2 id="list">Your networks</h2>
+{{if .Nets}}
+<div class="table">
+<table>
+<thead><tr><th>Name</th><th>On</th><th>Router's address</th><th>Hands out</th><th>Devices</th><th>Internet</th><th>Also reaches</th></tr></thead>
+<tbody>
+{{range .Nets}}<tr>
+<td>{{.Name}}{{if .Management}} <span class="badge">manages the router</span>{{end}}</td>
+<td>{{.Kind}}</td>
+<td class="mono">{{.Address}}</td>
+<td class="mono">{{with .DHCP}}{{.}}{{else}}<span class="muted">nothing</span>{{end}}</td>
+<td>{{.Devices}}</td>
+<td>{{if .Internet}}<span class="ok">yes</span>{{else}}<span class="bad">no</span>{{end}}</td>
+<td>{{range $i, $z := .Reaches}}{{if $i}}, {{end}}{{$z}}{{else}}<span class="muted">nothing else</span>{{end}}</td>
+</tr>{{end}}
+</tbody>
+</table>
+</div>
+{{else}}
+<p class="empty">No networks besides the internet connection.</p>
+{{end}}
+<p class="help">To remove a network or change its rules, use <a href="/settings">Advanced</a>.</p>
+</section>
+
+{{if .Parents}}
+<section id="form" aria-labelledby="formtitle">
+<h2 id="formtitle">Add a network</h2>
+<p class="hint">The new network is a VLAN: it shares a port with an existing network, and devices join it through a switch or Wi-Fi access point that supports VLANs, set to the VLAN number below. Devices plugged straight into the router stay on the existing network.</p>
+<form method="post" action="/networks">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<div class="fields">
+<div>
+<label for="name">Name</label>
+<input id="name" name="name" type="text" value="{{.NetForm.Name}}" placeholder="guest" autocapitalize="off" required>
+</div>
+<div>
+<label for="parent">On the port</label>
+<select id="parent" name="parent">
+{{range .Parents}}<option value="{{.}}"{{if eq . $.NetForm.Parent}} selected{{end}}>{{.}}</option>
+{{end}}</select>
+</div>
+<div>
+<label for="id">VLAN number</label>
+<input id="id" name="id" type="text" inputmode="numeric" value="{{.NetForm.ID}}" placeholder="30" required>
+</div>
+</div>
+<div class="fields spaced">
+<div>
+<label for="address">Router's address on it</label>
+<input id="address" name="address" type="text" value="{{.NetForm.Address}}" placeholder="192.168.30.1/24" required>
+<p class="help">The /24 means up to 254 devices.</p>
+</div>
+<div>
+<label for="range_start">Hands out from</label>
+<input id="range_start" name="range_start" type="text" inputmode="decimal" value="{{.NetForm.RangeStart}}" placeholder="192.168.30.100">
+</div>
+<div>
+<label for="range_end">to</label>
+<input id="range_end" name="range_end" type="text" inputmode="decimal" value="{{.NetForm.RangeEnd}}" placeholder="192.168.30.199">
+</div>
+</div>
+<div class="fields spaced">
+<fieldset>
+<legend>Hand out addresses</legend>
+<label class="check"><input type="checkbox" name="dhcp" value="on"{{if .NetForm.DHCP}} checked{{end}}> Yes, devices get an address by themselves</label>
+</fieldset>
+<fieldset>
+<legend>It may reach</legend>
+<div class="choices">
+<label><input type="radio" name="reach" value="internet"{{if ne .NetForm.Reach "all"}} checked{{end}}>The internet only</label>
+{{if .HasPolicies}}<label><input type="radio" name="reach" value="all"{{if eq .NetForm.Reach "all"}} checked{{end}}>Internet and your networks</label>{{end}}
+</div>
+<p class="help">{{if .HasPolicies}}"Internet only" keeps its devices away from your other networks. Recommended for guests and gadgets.{{else}}With no firewall rules in router.toml, every network reaches the internet and nothing else.{{end}}</p>
+</fieldset>
+</div>
+<div class="buttons spaced">
+<button type="submit" name="action" value="review">Review</button>
+</div>
+</form>
+</section>
+{{end}}
+{{template "bottom" .}}

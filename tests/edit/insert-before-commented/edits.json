@@ -1,0 +1,2 @@
+[{"op": "insert", "table": "firewall.policy", "index": 1,
+  "fields": [["from", "iot"], ["to", "wan"], ["action", "accept"]]}]

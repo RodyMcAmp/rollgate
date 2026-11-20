@@ -1,0 +1,4 @@
+[{"op": "add", "table": "vlan", "fields": [["name", "guest"], ["parent", "lan"], ["id", 30], ["ipv4", "192.168.30.1/24"]]},
+ {"op": "set", "table": "dhcp.guest", "fields": [["range", ["192.168.30.100", "192.168.30.199"]]]},
+ {"op": "insert", "table": "firewall.policy", "index": 2,
+  "fields": [["from", "guest"], ["to", "wan"], ["action", "accept"], ["comment", "guest: internet only"]]}]

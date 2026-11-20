@@ -30,9 +30,11 @@ const (
 	opChange
 	opRemove
 	opSet
+	opInsert
 )
 
-// Edit is one change to router.toml. Make one with Add, Change, Remove or Set.
+// Edit is one change to router.toml. Make one with Add, Insert, Change,
+// Remove or Set.
 type Edit struct {
 	op      op
 	table   string
@@ -47,6 +49,14 @@ type Edit struct {
 // "firewall.port_forward", after its last entry.
 func Add(table string, fields ...Field) Edit {
 	return Edit{op: opAdd, table: table, set: fields}
+}
+
+// Insert adds an entry to the list table before entry before (from 0, in
+// file order), above the comment lines that belong to that entry; before
+// equal to the number of entries adds it at the end. For lists whose order
+// matters, such as "firewall.policy" (ADR 0017).
+func Insert(table string, before int, fields ...Field) Edit {
+	return Edit{op: opInsert, table: table, index: before, set: fields}
 }
 
 // Change changes entry index (from 0, in file order) of the list table. The
@@ -112,7 +122,7 @@ func Apply(source []byte, edits ...Edit) ([]byte, error) {
 		return nil, refuse("router.toml has a section name in quotes. %s", AdvancedHint)
 	}
 	want := normalize(old).(map[string]any) // a copy
-	indexed, added, set := map[string]bool{}, map[string]bool{}, map[string]bool{}
+	indexed, added, set, inserted := map[string]bool{}, map[string]bool{}, map[string]bool{}, map[string]bool{}
 	var ps []patch
 	for n, e := range edits {
 		if err := e.check(); err != nil {
@@ -125,7 +135,15 @@ func Apply(source []byte, edits ...Edit) ([]byte, error) {
 			}
 			indexed[e.table] = true
 		case opAdd:
+			if inserted[e.table] {
+				return nil, fmt.Errorf("edit: an insert and an add on one list at a time (%s)", e.table)
+			}
 			added[e.table] = true
+		case opInsert:
+			if indexed[e.table] || added[e.table] {
+				return nil, fmt.Errorf("edit: one insert, change or removal per list at a time (%s)", e.table)
+			}
+			indexed[e.table], inserted[e.table] = true, true
 		case opSet:
 			if set[e.table] {
 				return nil, fmt.Errorf("edit: one Set per section at a time; put all its keys in one (%q)", e.table)
@@ -215,8 +233,11 @@ func (e Edit) check() error {
 	if (e.op == opChange || e.op == opRemove) && (e.index < 0 || !bareKey.MatchString(e.idKey)) {
 		return fmt.Errorf("edit: an entry is named by its position and a key")
 	}
-	if e.op == opAdd && len(e.set) == 0 {
+	if (e.op == opAdd || e.op == opInsert) && len(e.set) == 0 {
 		return fmt.Errorf("edit: a new entry needs at least one key")
+	}
+	if e.op == opInsert && e.index < 0 {
+		return fmt.Errorf("edit: an insert goes before an entry, counted from 0")
 	}
 	return nil
 }
@@ -247,6 +268,22 @@ func (e Edit) patches(d *doc, old map[string]any) ([]patch, error) {
 			after = d.lastWithPrefix(e.table)
 		}
 		return []patch{d.newSection(after, e.table, true, e.set)}, nil
+
+	case opInsert:
+		list, plain := d.entries(e.table)
+		switch {
+		case plain:
+			return nil, refuse("%s is a single section in router.toml, not a list. %s", e.table, AdvancedHint)
+		case e.index > len(list):
+			return nil, ErrStale
+		case e.index == len(list):
+			add := e
+			add.op = opAdd
+			return add.patches(d, old)
+		}
+		b := list[e.index]
+		lines := append(append([]string{"[[" + e.table + "]]"}, fieldLines(e.set)...), "")
+		return []patch{{start: b.start, end: b.start, lines: lines, section: true, table: e.table}}, nil
 
 	case opChange, opRemove:
 		list, _ := d.entries(e.table)
@@ -399,6 +436,16 @@ func (e Edit) expect(want map[string]any) error {
 		}
 		_, last := splitTable(e.table)
 		parent[last] = append(entries, fieldsMap(e.set))
+	case opInsert:
+		entries, parent, err := list(want, e.table, true)
+		if err != nil {
+			return err
+		}
+		if e.index > len(entries) {
+			return ErrStale
+		}
+		_, last := splitTable(e.table)
+		parent[last] = append(entries[:e.index:e.index], append([]any{fieldsMap(e.set)}, entries[e.index:]...)...)
 	case opChange:
 		entries, _, err := list(want, e.table, false)
 		if err != nil {

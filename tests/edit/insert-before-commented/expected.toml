@@ -1,0 +1,16 @@
+schema_version = 1
+
+[[firewall.policy]]
+from = "lan"
+to = "*"
+action = "accept"
+[[firewall.policy]]
+from = "iot"
+to = "wan"
+action = "accept"
+
+# Everything else is dropped. Keep this rule last.
+[[firewall.policy]]
+from = "*"
+to = "*"
+action = "drop"

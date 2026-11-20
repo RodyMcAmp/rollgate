@@ -3,7 +3,7 @@
 #
 #   1. The config sets dns.blocklists to a list the host serves over HTTPS (its
 #      certificate is trusted by rollgate-blocklists.service only) and allows one
-#      name. rollgate-blocklists.timer is enabled. The apply starts a download by
+#      name. rollgate-blocklists.timer is active. The apply starts a download by
 #      itself, and rollgate status says how many names are blocked.
 #   2. Through the router's DNS: listed names and names under them answer 0.0.0.0,
 #      in hosts and Adblock format; the allowed name doesn't.
@@ -131,7 +131,7 @@ until_status() {
 }
 
 log "1. apply: the blocklist downloads by itself"
-grep -q "^enabled" <<<"$(vm 'systemctl is-enabled rollgate-blocklists.timer')" || die "rollgate-blocklists.timer isn't enabled"
+grep -qx "active" <<<"$(vm 'systemctl is-active rollgate-blocklists.timer')" || die "rollgate-blocklists.timer isn't active: $(vm 'systemctl status rollgate-blocklists.timer --no-pager' || true)"
 out=$(vm 'rollgate apply' 2>&1) || die "rollgate apply failed: $out"
 [[ $out == *"Downloading the DNS blocklists in the background"* ]] || die "apply didn't start the download: $out"
 vm 'rollgate confirm' >/dev/null || die "rollgate confirm failed"
