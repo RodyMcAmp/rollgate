@@ -1,0 +1,27 @@
+# First-boot setup (ADR 0020): applies the installed /etc/rollgate/router.toml and
+# keeps it if the health checks pass (WAN's may fail: that's the ISP, not the config),
+# or undoes it and says why on the console. It runs only while no config has ever
+# been applied, so a router that is set up, or gets this through an update, never
+# runs it. The console's login prompts wait for it, so the setup screen can show
+# what it did.
+[Unit]
+Description=rollgate: apply the router's settings at first boot
+RequiresMountsFor=/var/lib/rollgate
+ConditionDirectoryNotEmpty=!/var/lib/rollgate/generations
+# An image without a router.toml has nothing to apply; the console still asks for
+# the password.
+ConditionPathExists=/etc/rollgate/router.toml
+After=network.target systemd-networkd.service nftables.service sshd.service unbound.service dnsmasq.service
+Before=rollgate-health.service getty-pre.target
+Wants=getty-pre.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/rollgate firstboot
+StandardOutput=journal+console
+StandardError=journal+console
+TimeoutStartSec=15min
+
+[Install]
+WantedBy=multi-user.target

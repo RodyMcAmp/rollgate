@@ -90,6 +90,8 @@ ssh-keygen -q -t ed25519 -N '' -f "$work/key"
 mount -o loop,offset="$root_offset",subvol=/@ "$work/disk.img" "$work/root"
 install -d -m 0700 "$work/root/root/.ssh"
 install -m 0600 "$work/key.pub" "$work/root/root/.ssh/authorized_keys"
+# This test applies its config itself and counts generations: no first-boot apply (ADR 0020).
+ln -sf /dev/null "$work/root/etc/systemd/system/rollgate-firstboot.service"
 install -m 0600 "$work/key.pub" "$work/root/etc/rollgate/secrets/admin.pub"
 blocklist_config on > "$work/root/etc/rollgate/router.toml"
 install -m 0644 "$work/list.crt" "$work/root/etc/rollgate-test-ca.pem"

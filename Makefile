@@ -20,7 +20,7 @@ SHELL_SCRIPTS := image/build.sh tests/vm/boot-test.sh tests/vm/rollback-test.sh 
 	image/rootfs/usr/local/lib/rollgate/boot-report
 
 .PHONY: check golden-update rollgate rollgate-release release-dry-run package test-netns \
-	image image-previous vmware test-vmware test-api test-web test-blocklists test-vpn test-clock test-vm test-apply test-ipv6 test-trial test-rollback test-update clean
+	image image-previous vmware test-vmware test-api test-web test-blocklists test-vpn test-firstboot test-clock test-vm test-apply test-ipv6 test-trial test-rollback test-update clean
 
 ## L0 + L1: shell lint, Go format/vet/lint/tests, and the example config validates.
 ## Run before every commit.
@@ -131,6 +131,13 @@ test-blocklists:
 ## removed [vpn] get nothing. Needs the wireguard module and wireguard-tools.
 test-vpn:
 	$(SUDO) LOG_DIR=$(BUILD_DIR)/test-logs bash tests/vm/vpn-test.sh $(IMAGE)
+
+## L3: first-boot setup (ADR 0020): a new router applies its router.toml and keeps it
+## by itself, the console asks for one password that works there and on the web UI
+## (not over SSH), nothing runs again after a reboot, and a config that fails a
+## health check is undone with the reason on the console.
+test-firstboot:
+	$(SUDO) LOG_DIR=$(BUILD_DIR)/test-logs bash tests/vm/firstboot-test.sh $(IMAGE)
 
 ## L3: the clock synchronizes, and without DNS, with the clock 9 hours back, from
 ## Cloudflare's time service by IP address (ADR 0013, 0015). Needs internet.

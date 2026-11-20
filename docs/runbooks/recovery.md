@@ -4,7 +4,7 @@
 
 You need physical access: a monitor and keyboard plugged into the router, or a serial console cable (115200 baud).
 
-**Logging in at the console:** user `root`. A fresh install has no root password; the login screen reminds you to set one with `passwd`. Do that on day one, and keep the password with this page.
+**Logging in at the console:** user `root`, with the router's password: the one its screen asked you to choose on the first boot, which is also the web UI's. Keep it with this page.
 
 > Commands marked *(planned)* arrive in later milestones.
 
@@ -91,6 +91,7 @@ This exact sequence is tested automatically on every release (`make test-rollbac
 | `nft list ruleset \| less` | The firewall rules that are actually loaded |
 | `snapper list` | Snapshots and their numbers |
 | `rollgate status` | Which settings are running, whether a change is waiting for `rollgate confirm`, the recent history, the release, what the last update did, and whether the clock is right |
-| `rollgate web-password` | Sets a new web UI password, if you forgot it |
+| `rollgate password` | Sets a new router password, for the console and the web UI, if you forgot it (log in over SSH with your key) |
+| `rollgate web-password` | Sets a new password for the web UI only |
 | `timedatectl` | The time, and whether it is synchronized. Updates fail while the clock is wrong |
 | `rollgate health` | Whether the firewall, WAN, DNS, SSH and services are all working, one line each |

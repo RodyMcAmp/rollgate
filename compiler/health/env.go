@@ -17,10 +17,10 @@ import (
 
 const netTimeout = 2 * time.Second
 
-// SystemEnv is the real router below root ("/"): real commands, the running
+// SystemEnv is the real router below root ("/"): real commands, the installed
 // config from the generation store, real DNS and TCP.
 func SystemEnv(root string) (Env, error) {
-	c, err := RunningConfig(root)
+	c, err := InstalledConfig(root)
 	if err != nil {
 		return Env{}, err
 	}
@@ -48,6 +48,26 @@ func RunningConfig(root string) (*config.Config, error) {
 	if err != nil || !ok {
 		return nil, err
 	}
+	return generationConfig(st, n)
+}
+
+// InstalledConfig returns the config whose files are installed, which the
+// checks test: during a confirm window the pending generation's, so the
+// checks judge the change before it's kept (the first boot keeps its apply
+// only if they pass, ADR 0020); otherwise RunningConfig's.
+func InstalledConfig(root string) (*config.Config, error) {
+	st := apply.Store{Root: root}
+	n, ok, err := st.Pending()
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return RunningConfig(root)
+	}
+	return generationConfig(st, n)
+}
+
+func generationConfig(st apply.Store, n int) (*config.Config, error) {
 	g, err := st.Load(n)
 	if err != nil {
 		return nil, err

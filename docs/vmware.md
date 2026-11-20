@@ -62,46 +62,40 @@ make vmware SSH_KEY=/mnt/c/Users/<you>/.ssh/rollgate_ed25519.pub VMWARE_DIR="/mn
 
 Either way you get a folder `rollgate-<date>` with `rollgate.vmx` and `rollgate.vmdk` (about 1.3 GB).
 
-## 4. Start it and apply the config
+## 4. Start it and choose a password
 
 1. In VMware: **File → Open…**, choose `rollgate.vmx`, then **Power on this virtual machine**.
    If VMware asks whether you moved or copied the VM, answer **I Copied It**.
-2. Click into the VM's window. At `rollgate login:` type `root` (no password yet).
-   To get the mouse back out of the window, press **Ctrl+Alt**.
-3. Set a root password, for the console only (SSH uses your key):
+2. Wait about a minute. On its first boot the router applies its `router.toml` by itself, and keeps it if its health checks pass (ADR 0020).
+3. The VM's window asks you to **choose a password for this router**, at least 10 characters, typed twice (nothing shows as you type). Click into the window first; **Ctrl+Alt** gets the mouse back out.
+   That one password is for logging in at the console (as `root`) and on the web UI. SSH doesn't accept it: SSH uses your key.
+4. The window then shows the web UI's address, `https://192.168.77.2/`, and its certificate's fingerprint. The login prompt keeps showing both.
 
-   ```
-   passwd
-   ```
+If the first boot couldn't use the settings (a typo in `router.toml`, say), the window says so before asking for the password, and the router runs without them. Log in at the console, fix `/etc/rollgate/router.toml`, then run `rollgate apply` and `rollgate confirm`.
 
-4. Apply the router config and keep it:
-
-   ```
-   rollgate apply
-   rollgate confirm
-   ```
-
-   At the console, `rollgate confirm` is always allowed. Over SSH it must come from a new connection, so a change that cut you off can't confirm itself (ADR 0010).
+*(This needs a release from after 2026-11-20. With an older one, log in as `root` with no password, run `passwd`, then `rollgate apply` and `rollgate confirm`, and `rollgate web-password` for the web UI.)*
 
 ## 5. Connect from your PC
 
-In PowerShell:
+Open `https://192.168.77.2/` in your browser and log in with the router's password.
+The browser warns about the certificate once, because the router made it itself. Compare the fingerprint the browser shows (click the warning, then the certificate details) with the one the VM's window shows, then accept it.
+
+For a shell, in PowerShell:
 
 ```
 ssh -i $HOME\.ssh\rollgate_ed25519 root@192.168.77.2
 ```
 
-Then, on the router:
+(In Command Prompt, write `%USERPROFILE%` instead of `$HOME`.) Then, on the router:
 
 ```
 rollgate health        every check should say "ok"
 rollgate status        the config generation, the release, and the last update
+rollgate password      change the router's password, for the console and the web UI
 ```
 
 ## Things to try
 
-- **The web UI** (from a release that has it): run `rollgate web-password` on the router and pick a password of at least 10 characters. Then open `https://192.168.77.2/` in your browser on the PC.
-  The browser warns about the certificate, because the router made it itself. Compare the fingerprint the browser shows (click the warning, then the certificate details) with the one `rollgate web-password` printed, then accept it.
 - **Lock yourself out on purpose:** in `/etc/rollgate/router.toml`, change lan's `ipv4` to `"192.168.77.3/24"` and run `rollgate apply` over SSH. Your session stops working, because the router left 192.168.77.2. Don't confirm: 2 minutes later the old config comes back by itself, and `ssh root@192.168.77.2` works again.
 - **A LAN client:** give another VM a network adapter on VMnet2. It gets an address from the router (192.168.77.100–199) and reaches the internet through it.
 - **Updates:** `rollgate update` installs the newest release once there is one newer than the VM's, with a trial boot and automatic rollback (ADR 0011).
