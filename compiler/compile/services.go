@@ -36,7 +36,19 @@ type unbound struct {
 	IPv6Off    bool
 	Forwarders []string // in Unbound's forward-addr syntax, which the spec uses too
 	TLS        bool
+
+	Blocklist     bool // dns.blocklists is set: include the downloaded names
+	BlocklistGlob string
 }
+
+// BlocklistFile is where rollgate dns update keeps the blocked names (ADR
+// 0019): inside Unbound's chroot (/etc/unbound), so a reload can read it.
+// unbound.conf includes it with a pattern, which matches nothing until the
+// first download instead of failing.
+const (
+	BlocklistFile = "/etc/unbound/rollgate-blocklist.conf"
+	blocklistGlob = "/etc/unbound/rollgate-blocklist*.conf"
+)
 
 func buildDNSMasq(c *config.Config, header string) dnsmasq {
 	d := dnsmasq{Header: header, Hostname: c.System.Hostname, Domain: c.System.Domain}
@@ -65,7 +77,8 @@ func buildDNSMasq(c *config.Config, header string) dnsmasq {
 }
 
 func buildUnbound(c *config.Config, header string) unbound {
-	u := unbound{Header: header, Domain: c.System.Domain, IPv6Off: c.System.IPv6 == "off"}
+	u := unbound{Header: header, Domain: c.System.Domain, IPv6Off: c.System.IPv6 == "off",
+		Blocklist: len(c.DNS.Blocklists) > 0, BlocklistGlob: blocklistGlob}
 	if c.DNS.Mode == "forward" {
 		u.Forwarders = c.DNS.Forwarders
 		// Validation guarantees all or none use TLS.

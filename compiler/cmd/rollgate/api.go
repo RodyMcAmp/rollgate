@@ -16,6 +16,7 @@ import (
 
 	"github.com/RodyMcAmp/rollgate/compiler/api"
 	"github.com/RodyMcAmp/rollgate/compiler/apply"
+	"github.com/RodyMcAmp/rollgate/compiler/blocklist"
 	"github.com/RodyMcAmp/rollgate/compiler/compile"
 	"github.com/RodyMcAmp/rollgate/compiler/config"
 	"github.com/RodyMcAmp/rollgate/compiler/health"
@@ -190,6 +191,13 @@ func status(s apply.System, w io.Writer) error {
 	}
 	_, clock := update.Clock(s.Run)
 	fmt.Fprintf(w, "Clock: %s.\n", clock)
+	if c, err := health.RunningConfig(s.Root); err == nil && c != nil && len(c.DNS.Blocklists) > 0 {
+		if st, ok := blocklist.ReadState(s.Root); ok {
+			fmt.Fprintln(w, st.Summary())
+		} else {
+			fmt.Fprintln(w, "DNS blocklists: not downloaded yet (journalctl -u rollgate-blocklists says why).")
+		}
+	}
 	fmt.Fprintln(w, web.Status(s.Root))
 	return nil
 }

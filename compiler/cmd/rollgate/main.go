@@ -11,12 +11,14 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/RodyMcAmp/rollgate/compiler/apply"
+	"github.com/RodyMcAmp/rollgate/compiler/blocklist"
 	"github.com/RodyMcAmp/rollgate/compiler/compile"
 	"github.com/RodyMcAmp/rollgate/compiler/config"
 	"github.com/RodyMcAmp/rollgate/compiler/health"
@@ -54,6 +56,9 @@ changing the router (as root; docs/architecture.md#safe-apply):
                            again (it and this one swap places); then reboot.
                            Booted from the "rollgate previous system" menu entry,
                            it keeps the running system instead
+
+  dns update               download dns.blocklists and give them to Unbound
+                           (ADR 0019; rollgate-blocklists.timer runs it daily)
 
 health (docs/architecture.md#health-checks):
   health [-wait SECONDS] [-boot]
@@ -177,6 +182,21 @@ func run(args []string, stdout, stderr io.Writer) int {
 			want = args[1]
 		}
 		return updateCmd(want, stdout, stderr)
+	case "dns":
+		if len(args) != 2 || args[1] != "update" {
+			fmt.Fprint(stderr, usage)
+			return 2
+		}
+		if os.Geteuid() != 0 {
+			fmt.Fprintln(stderr, "rollgate dns update: must run as root")
+			return 1
+		}
+		s := system(stdout)
+		if err := blocklist.Update(blocklist.System{Root: s.Root, Run: s.Run, Get: blocklist.HTTPGet, Now: time.Now, Out: stdout}); err != nil {
+			fmt.Fprintf(stderr, "rollgate dns update: %v\n", err)
+			return 1
+		}
+		return 0
 	case "health":
 		return healthCmd(args[1:], stdout, stderr)
 	case "api":
@@ -340,7 +360,20 @@ func applyFile(s apply.System, path string, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	return apply.Apply(s, c, source, files)
+	prev, _ := health.RunningConfig(s.Root)
+	if err := apply.Apply(s, c, source, files); err != nil {
+		return err
+	}
+	// New or changed blocklists: download them now, in the background,
+	// instead of waiting for the daily timer (ADR 0019).
+	if len(c.DNS.Blocklists) > 0 && (prev == nil || !slices.Equal(prev.DNS.Blocklists, c.DNS.Blocklists) || !slices.Equal(prev.DNS.Allow, c.DNS.Allow)) {
+		if out, err := s.Run.Run("systemctl", "start", "--no-block", "rollgate-blocklists.service"); err != nil {
+			fmt.Fprintf(s.Out, "note: couldn't start downloading the DNS blocklists (%v: %s); the daily timer will.\n", err, strings.TrimSpace(string(out)))
+		} else {
+			fmt.Fprintln(s.Out, "Downloading the DNS blocklists in the background; rollgate status shows when they're in use.")
+		}
+	}
+	return nil
 }
 
 // diffCmd follows diff(1)'s exit codes: 0 no changes, 1 changes, 2 trouble.

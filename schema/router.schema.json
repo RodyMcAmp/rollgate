@@ -59,8 +59,15 @@
       "additionalProperties": false,
       "description": "How the router resolves names.",
       "properties": {
+        "allow": {
+          "description": "Names never blocked, with every name under them.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "blocklists": {
-          "description": "Planned (M6); must be empty for now.",
+          "description": "Names to block on every network: \"recommended\" or https:// URLs of lists (ADR 0019).",
           "items": {
             "type": "string"
           },

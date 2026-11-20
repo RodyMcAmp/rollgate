@@ -1,0 +1,12 @@
+# rollgate dns update (ADR 0019): download dns.blocklists and give them to
+# Unbound. One-shot: started by rollgate-blocklists.timer, and by rollgate
+# apply when the blocklist settings change. With no blocklists set it only
+# tidies up and exits.
+[Unit]
+Description=rollgate: update the DNS blocklists
+Wants=network-online.target
+After=network-online.target unbound.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/rollgate dns update

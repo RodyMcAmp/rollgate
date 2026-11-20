@@ -20,7 +20,12 @@ package() {
   install -Dm0644 -t "$pkgdir/usr/lib/systemd/system" \
     "$startdir/rollgate-boot.service" "$startdir/rollgate-health.service" \
     "$startdir/rollgate-api.socket" "$startdir/rollgate-api.service" \
-    "$startdir/rollgate-web.socket" "$startdir/rollgate-web.service"
+    "$startdir/rollgate-web.socket" "$startdir/rollgate-web.service" \
+    "$startdir/rollgate-blocklists.service" "$startdir/rollgate-blocklists.timer"
+  # ADR 0019: the DNS blocklists' daily update. With no blocklists set, a run
+  # only tidies up and exits.
+  install -dm0755 "$pkgdir/usr/lib/systemd/system/timers.target.wants"
+  ln -s ../rollgate-blocklists.timer "$pkgdir/usr/lib/systemd/system/timers.target.wants/rollgate-blocklists.timer"
   install -Dm0644 "$startdir/sysusers.conf" "$pkgdir/usr/lib/sysusers.d/rollgate.conf"
   install -Dm0755 -t "$pkgdir/usr/lib/rollgate/health.d" "$startdir"/health.d/*
   # ADR 0013: systemd-timesyncd keeps the clock right, on routers that update too.

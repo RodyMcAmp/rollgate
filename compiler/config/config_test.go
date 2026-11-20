@@ -132,7 +132,12 @@ func TestProblems(t *testing.T) {
 		{"plain forwarders", base + "[dns]\nmode = \"forward\"\nforwarders = [\"9.9.9.9\", \"1.1.1.1@53\"]\n", nil},
 		{"TLS and plain mixed", base + "[dns]\nmode = \"forward\"\nforwarders = [\"9.9.9.9@853#dns.quad9.net\", \"2620:fe::fe\"]\n", []string{"E009 dns.forwarders"}},
 		{"bad forwarder", base + "[dns]\nmode = \"forward\"\nforwarders = [\"dns.quad9.net\"]\n", []string{"E009 dns.forwarders"}},
-		{"blocklists not yet", base + "[dns]\nblocklists = [\"https://example.com/list\"]\n", []string{"E009 dns.blocklists"}},
+		{"blocklists", base + "[dns]\nblocklists = [\"recommended\", \"https://example.com/list.txt\"]\nallow = [\"Shop.Example.com.\"]\n", nil},
+		{"blocklist over http", base + "[dns]\nblocklists = [\"http://example.com/list\"]\n", []string{"E009 dns.blocklists[0]"}},
+		{"unknown built-in blocklist", base + "[dns]\nblocklists = [\"strict\"]\n", []string{"E009 dns.blocklists[0]"}},
+		{"blocklist twice", base + "[dns]\nblocklists = [\"recommended\", \"recommended\"]\n", []string{"E011 dns.blocklists[1]"}},
+		{"bad allow name", base + "[dns]\nblocklists = [\"recommended\"]\nallow = [\"not a name\"]\n", []string{"E009 dns.allow[0]"}},
+		{"allow without blocklists", base + "[dns]\nallow = [\"example.com\"]\n", []string{"E009 dns.allow"}},
 
 		{"same MAC twice", base + "\n[[interface]]\nname = \"a\"\nmatch_mac = \"00:00:5e:00:53:01\"\nipv4 = \"10.0.0.1/24\"\n" +
 			"\n[[interface]]\nname = \"b\"\nmatch_mac = \"00:00:5E:00:53:01\"\nipv4 = \"10.0.1.1/24\"\n", []string{`E011 interface "b" match_mac`}},

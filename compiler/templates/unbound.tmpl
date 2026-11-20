@@ -39,3 +39,9 @@ forward-zone:
 	forward-addr: {{.}}
 {{- end}}
 {{- end}}
+{{- if .Blocklist}}
+
+# dns.blocklists (ADR 0019): the names rollgate dns update downloaded, kept
+# inside Unbound's chroot. The pattern matches nothing until the first download.
+include: "{{.BlocklistGlob}}"
+{{- end}}

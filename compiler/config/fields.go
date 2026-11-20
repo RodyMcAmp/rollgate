@@ -5,6 +5,7 @@ import (
 	"maps"
 	"net"
 	"net/netip"
+	"net/url"
 	"regexp"
 	"slices"
 	"strconv"
@@ -256,8 +257,28 @@ func validateDNS(ps *problems, d *DNS) {
 	if tls > 0 && tls < len(d.Forwarders) {
 		ps.add(CodeInvalid, "dns.forwarders", "either all forwarders use DNS over TLS (\"ip@853#name\") or none do")
 	}
-	if len(d.Blocklists) > 0 {
-		ps.add(CodeInvalid, "dns.blocklists", "blocklists aren't supported yet (planned for M6); remove this setting for now")
+	seen := map[string]bool{}
+	for i, b := range d.Blocklists {
+		path := fmt.Sprintf("dns.blocklists[%d]", i)
+		if seen[b] {
+			ps.add(CodeDuplicate, path, "%q is listed twice", b)
+		}
+		seen[b] = true
+		if _, ok := BuiltinBlocklists[b]; ok {
+			continue
+		}
+		u, err := url.Parse(b)
+		if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil {
+			ps.add(CodeInvalid, path, "must be \"recommended\" or an https:// URL, not %q", b)
+		}
+	}
+	for i, a := range d.Allow {
+		if !validDomain(strings.TrimSuffix(strings.ToLower(a), ".")) {
+			ps.add(CodeInvalid, fmt.Sprintf("dns.allow[%d]", i), "%q isn't a domain name, such as \"example-shop.com\"", a)
+		}
+	}
+	if len(d.Allow) > 0 && len(d.Blocklists) == 0 {
+		ps.add(CodeInvalid, "dns.allow", "allow is only used with blocklists; add blocklists or remove allow")
 	}
 }
 

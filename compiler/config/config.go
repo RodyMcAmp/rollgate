@@ -86,7 +86,23 @@ type StaticLease struct {
 type DNS struct {
 	Mode       string   `toml:"mode"` // "recursive" or "forward"
 	Forwarders []string `toml:"forwarders"`
-	Blocklists []string `toml:"blocklists"`
+	Blocklists []string `toml:"blocklists"` // built-in names or https:// URLs (ADR 0019)
+	Allow      []string `toml:"allow"`      // names never blocked
+}
+
+// BuiltinBlocklists are the names dns.blocklists accepts besides URLs. A
+// change here is a reviewed code change, not a setting (ADR 0019).
+var BuiltinBlocklists = map[string]string{
+	// StevenBlack unified hosts: adware and malware, few false positives. MIT.
+	"recommended": "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts",
+}
+
+// BlocklistURL is where a dns.blocklists entry is downloaded from.
+func BlocklistURL(entry string) string {
+	if u, ok := BuiltinBlocklists[entry]; ok {
+		return u
+	}
+	return entry
 }
 
 type Firewall struct {

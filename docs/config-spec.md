@@ -81,7 +81,10 @@ There are no per-interface IPv6 settings. IPv6 is handled automatically by `syst
 |---|---|---|---|
 | `mode` | string | `"recursive"` | `"recursive"` (Unbound resolves from the root servers) or `"forward"` |
 | `forwarders` | array of strings | — | required when `mode = "forward"`. Each is `"ip"`, `"ip@port"`, or `"ip@port#tls-name"` for DNS over TLS. Either all forwarders use TLS or none do. |
-| `blocklists` | array of URLs | `[]` | domain blocklists fetched on a timer *(planned, M6)*. Until then a non-empty list is rejected, so it can't silently do nothing. |
+| `blocklists` | array of strings | `[]` | lists of names to block on every network (ADR 0019): `"recommended"` (a built-in, well-known list with few false positives) or `https://` URLs of lists in hosts, plain or simple Adblock format. Blocked names, and every name under them, answer `0.0.0.0` / `::`. The router downloads the lists once a day and keeps the last good copy if a download fails. |
+| `allow` | array of names | `[]` | names never blocked, with every name under them, for when a list gets one wrong. Only used with `blocklists`. |
+
+Blocklists: the router downloads each list over HTTPS once a day at a random time, and soon after boot and after an apply that changes these settings (`rollgate-blocklists.timer`). `"recommended"` is the StevenBlack unified hosts list (adware and malware), from `raw.githubusercontent.com`. At most 500,000 names are used. The router's own names and the local domain are never blocked. `rollgate status` says how many names are blocked and when the lists were last updated.
 
 Local names: devices that get an address from the router's DHCP are reachable as `<their hostname>.<domain>` (for example `nas.home.arpa`), and the router itself as `<hostname>.<domain>` (`gateway.home.arpa`), from every zone with a `[dhcp.<name>]` section.
 Names in `<domain>` are never sent to the internet.
