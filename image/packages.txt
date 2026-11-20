@@ -30,6 +30,9 @@ nftables
 openssh
 dnsmasq
 unbound
+# wg show, for rollgate vpn's "last connected" (ADR 0018). WireGuard itself is
+# in the kernel and systemd-networkd sets it up; nothing runs from this.
+wireguard-tools
 
 # Console troubleshooting (docs/runbooks/recovery.md)
 ethtool

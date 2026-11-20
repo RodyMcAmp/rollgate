@@ -103,6 +103,7 @@ A WireGuard VPN for reaching home from outside (ADR 0018): a phone or laptop awa
 
 - The VPN is a zone named `vpn`: `firewall.policy` rules can name it, and `management.allowed_zones` must list `"vpn"` for the router to be managed over the VPN. It never counts as the network that keeps the router manageable (E004): a network at home must.
 - The router's private key is a secret, `/etc/rollgate/secrets/vpn.key`; `rollgate vpn key` makes it and prints the router's public key. `rollgate apply` refuses a `[vpn]` section until it exists.
+- **Adding a device:** `rollgate vpn add NAME` makes the device's key pair, adds a `[[vpn.peer]]` with the next free address (keeping the rest of router.toml as it is), applies, and prints the device's configuration to import into the WireGuard app. It's shown **only then**: the device's private key is never stored on the router. `--home-only` sends only traffic for the home networks through the VPN instead of everything. `rollgate vpn remove NAME` removes a device; `rollgate vpn` shows when each device last connected.
 - Devices use the router's DNS (`address`), so local names work over the VPN.
 - `reach` is a forward rule for the `vpn` zone that comes before your `[[firewall.policy]]` rules. It only allows, so your rules can still let the `vpn` zone reach more.
 

@@ -23,7 +23,6 @@ import (
 	"github.com/RodyMcAmp/rollgate/compiler/config"
 	"github.com/RodyMcAmp/rollgate/compiler/health"
 	"github.com/RodyMcAmp/rollgate/compiler/update"
-	"github.com/RodyMcAmp/rollgate/compiler/vpn"
 )
 
 const usage = `usage: rollgate <command> [arguments]
@@ -58,8 +57,15 @@ changing the router (as root; docs/architecture.md#safe-apply):
                            Booted from the "rollgate previous system" menu entry,
                            it keeps the running system instead
 
+  vpn [status]             the VPN (ADR 0018): its port, the router's public key,
+                           and when each device last connected
   vpn key                  make the router's WireGuard key if there is none, and
-                           print its public key (ADR 0018)
+                           print its public key
+  vpn add [--home-only] NAME
+                           add a device: make its keys, add it to router.toml,
+                           apply, and print its configuration (shown only once).
+                           --home-only: only home traffic goes through the VPN
+  vpn remove NAME          remove a device from router.toml and apply
   dns update               download dns.blocklists and give them to Unbound
                            (ADR 0019; rollgate-blocklists.timer runs it daily)
 
@@ -186,24 +192,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		}
 		return updateCmd(want, stdout, stderr)
 	case "vpn":
-		if len(args) != 2 || args[1] != "key" {
-			fmt.Fprint(stderr, usage)
-			return 2
-		}
-		if os.Geteuid() != 0 {
-			fmt.Fprintln(stderr, "rollgate vpn key: must run as root")
-			return 1
-		}
-		pub, created, err := vpn.EnsureKey("/")
-		if err != nil {
-			fmt.Fprintf(stderr, "rollgate vpn key: %v\n", err)
-			return 1
-		}
-		if created {
-			fmt.Fprintf(stdout, "Made the router's VPN key (/%s).\n", vpn.KeyFile)
-		}
-		fmt.Fprintf(stdout, "The router's VPN public key: %s\n", pub)
-		return 0
+		return vpnCmd(args[1:], stdout, stderr)
 	case "dns":
 		if len(args) != 2 || args[1] != "update" {
 			fmt.Fprint(stderr, usage)

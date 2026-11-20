@@ -13,7 +13,10 @@
 #      VPN is closed (management.allowed_zones doesn't list "vpn"). A client with an
 #      unknown key gets nothing.
 #   3. With reach = "internet": the internet still; the firewall drops it toward the LAN.
-#   4. Without [vpn]: the client gets nothing, and the firewall has no VPN port.
+#   4. rollgate vpn add makes a device whose printed configuration connects, and
+#      whose private key isn't in router.toml; rollgate vpn shows it connected;
+#      rollgate vpn remove disconnects it.
+#   5. Without [vpn]: the client gets nothing, and the firewall has no VPN port.
 #
 # Usage:  sudo tests/vm/vpn-test.sh build/rollgate-<date>.img
 # Env:    LOG_DIR, OVMF_CODE, OVMF_VARS as in boot-test.sh; PORT (default 2290: SSH,
@@ -57,6 +60,7 @@ cleanup() {
   for p in "${pids[@]}"; do kill "$p" 2>/dev/null || true; done
   ip netns del "$ns" 2>/dev/null || true
   ip netns del "$stranger" 2>/dev/null || true
+  ip netns del "rgvpnl$$" 2>/dev/null || true
   [[ -n $qemu_pid ]] && kill "$qemu_pid" 2>/dev/null && wait "$qemu_pid" 2>/dev/null
   mountpoint -q "$work/root" && umount "$work/root"
   rm -rf "$work"
@@ -125,14 +129,15 @@ apply_config() {
   out=$(vm 'rollgate apply' 2>&1) || die "applying the $1 config failed: $out"
   vm 'rollgate confirm' >/dev/null || die "rollgate confirm failed"
 }
-# client NS KEYFILE: a WireGuard client in namespace NS, as 10.66.0.2.
+# client NS KEYFILE [ADDRESS]: a WireGuard client in namespace NS, as ADDRESS
+# (default 10.66.0.2).
 client() {
   local dev=wg$1
   ip netns add "$1"
   ip link add "$dev" type wireguard
   wg set "$dev" private-key "$2" peer "$router_pub" endpoint "127.0.0.1:$wg_port" allowed-ips 0.0.0.0/0 persistent-keepalive 5
   ip link set "$dev" netns "$1"
-  ip -n "$1" addr add 10.66.0.2/32 dev "$dev"
+  ip -n "$1" addr add "${3:-10.66.0.2}/32" dev "$dev"
   ip -n "$1" link set lo up
   ip -n "$1" link set "$dev" up
   ip -n "$1" route add default dev "$dev"
@@ -195,7 +200,32 @@ apply_config internet
 [[ $(lan_verdict) == dropped ]] || die "the firewall still lets the client through to the LAN with reach = internet"
 log "  internet yes, LAN no"
 
-log "4. without [vpn]: nothing, and no port open"
+log "4. rollgate vpn add, a client with the configuration it prints, rollgate vpn, rollgate vpn remove"
+out=$(vm 'rollgate vpn add laptop' 2>&1) || die "rollgate vpn add failed: $out"
+vm 'rollgate confirm' >/dev/null || die "rollgate confirm failed"
+sed -n 's/^PrivateKey = //p' <<<"$out" > "$work/laptop.key"
+laptop_addr=$(sed -n 's/^Address = \(.*\)\/32$/\1/p' <<<"$out")
+[[ -s $work/laptop.key && $laptop_addr == 10.66.0.3 ]] || die "rollgate vpn add printed no usable configuration: $out"
+grep -q "^Endpoint = 10.0.3.15:51820$" <<<"$out" || die "the configuration's endpoint isn't the router's WAN address: $out"
+grep -q "carrier-grade NAT\|forwards UDP port" <<<"$out" || die "no warning about the private WAN address: $out"
+vm 'grep -q "name = \"laptop\"" /etc/rollgate/router.toml' || die "router.toml has no laptop"
+vm 'grep -q "^PrivateKey" /etc/rollgate/router.toml' && die "the device's private key is in router.toml"
+laptop=rgvpnl$$
+client "$laptop" "$work/laptop.key" "$laptop_addr"
+start=$SECONDS
+until ip netns exec "$laptop" ping -c 1 -W 2 10.66.0.1 >/dev/null 2>&1; do
+  ((SECONDS - start < 60)) || { ip netns del "$laptop"; die "the added device can't reach the router"; }
+  sleep 1
+done
+status=$(vm 'rollgate vpn')
+grep -Eq "laptop +10.66.0.3 +last connected (just now|[0-9]+ min ago)" <<<"$status" || { ip netns del "$laptop"; die "rollgate vpn doesn't show the laptop connected: $status"; }
+vm 'rollgate vpn remove laptop' >/dev/null 2>&1 || { ip netns del "$laptop"; die "rollgate vpn remove failed"; }
+vm 'rollgate confirm' >/dev/null || die "rollgate confirm failed"
+if ip netns exec "$laptop" ping -c 2 -W 2 10.66.0.1 >/dev/null 2>&1; then ip netns del "$laptop"; die "the removed device still reaches the router"; fi
+ip netns del "$laptop"
+log "  added (10.66.0.3, with a warning about the private WAN address), connected, shown by rollgate vpn, removed"
+
+log "5. without [vpn]: nothing, and no port open"
 apply_config off
 if in_ns ping -c 2 -W 2 10.66.0.1 >/dev/null 2>&1; then die "the client still reaches the router without [vpn]"; fi
 grep -q "51820" <<<"$(vm 'nft list ruleset')" && die "the firewall still opens the VPN port"
