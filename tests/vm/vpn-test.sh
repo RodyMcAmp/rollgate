@@ -135,7 +135,15 @@ client() {
   local dev=wg$1
   ip netns add "$1"
   ip link add "$dev" type wireguard
-  wg set "$dev" private-key "$2" peer "$router_pub" endpoint "127.0.0.1:$wg_port" allowed-ips 0.0.0.0/0 persistent-keepalive 5
+  # The key goes through a pipe, as wg-quick passes it: on GitHub's runners wg
+  # couldn't open a key file in the work directory itself ("fopen: Permission
+  # denied"), most likely the host's AppArmor.
+  if ! wg set "$dev" private-key <(cat "$2") peer "$router_pub" endpoint "127.0.0.1:$wg_port" allowed-ips 0.0.0.0/0 persistent-keepalive 5; then
+    echo "--- id: $(id); confinement: $(cat /proc/self/attr/current 2>&1)" >&2
+    ls -ld "$work" "$2" >&2 || true
+    dmesg 2>&1 | grep -i 'apparmor\|denied' | tail -5 >&2 || true
+    die "couldn't set up the WireGuard client $1"
+  fi
   ip link set "$dev" netns "$1"
   ip -n "$1" addr add "${3:-10.66.0.2}/32" dev "$dev"
   ip -n "$1" link set lo up
