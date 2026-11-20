@@ -104,11 +104,15 @@ func Update(s System) error {
 	file := s.path(strings.TrimPrefix(compile.BlocklistFile, "/"))
 	if c == nil || len(c.DNS.Blocklists) == 0 {
 		// Nothing to block: unbound.conf doesn't include the file, so it only
-		// takes space.
-		_ = os.Remove(file)
+		// takes space. If there was one, dnsmasq may still have blocked
+		// answers cached.
+		had := os.Remove(file) == nil
 		_ = os.RemoveAll(s.path(cacheDir))
 		_ = os.Remove(s.path(StatePath))
-		fmt.Fprintln(s.Out, "No DNS blocklists are set (dns.blocklists); nothing to do.")
+		if had {
+			s.flushDNSCache()
+		}
+		fmt.Fprintln(s.Out, "No DNS blocklists are set (dns.blocklists); nothing to block.")
 		return nil
 	}
 
@@ -221,6 +225,7 @@ func (s System) install(file string, content []byte) error {
 	}
 	out, err := s.Run.Run("systemctl", "reload-or-restart", "unbound.service")
 	if err == nil {
+		s.flushDNSCache()
 		return nil
 	}
 	if oldErr == nil {
@@ -230,6 +235,14 @@ func (s System) install(file string, content []byte) error {
 	}
 	_, _ = s.Run.Run("systemctl", "reload-or-restart", "unbound.service")
 	return fmt.Errorf("unbound didn't take the new list, so the old one is back: %v: %s", err, bytes.TrimSpace(out))
+}
+
+// flushDNSCache makes dnsmasq forget its cached answers (SIGHUP), so a name
+// that is blocked or allowed now isn't answered from before for up to an hour.
+func (s System) flushDNSCache() {
+	if out, err := s.Run.Run("systemctl", "kill", "--signal=HUP", "dnsmasq.service"); err != nil {
+		fmt.Fprintf(s.Out, "note: couldn't clear dnsmasq's cache (%v: %s); old answers expire within an hour.\n", err, bytes.TrimSpace(out))
+	}
 }
 
 func (s System) saveState(st State) error {

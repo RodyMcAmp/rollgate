@@ -364,12 +364,17 @@ func applyFile(s apply.System, path string, stderr io.Writer) error {
 	if err := apply.Apply(s, c, source, files); err != nil {
 		return err
 	}
-	// New or changed blocklists: download them now, in the background,
-	// instead of waiting for the daily timer (ADR 0019).
-	if len(c.DNS.Blocklists) > 0 && (prev == nil || !slices.Equal(prev.DNS.Blocklists, c.DNS.Blocklists) || !slices.Equal(prev.DNS.Allow, c.DNS.Allow)) {
+	// Blocklist settings changed (added, changed or removed): update now, in
+	// the background, instead of waiting for the daily timer (ADR 0019). With
+	// none set, the update tidies up and clears dnsmasq's cached answers.
+	var was config.DNS
+	if prev != nil {
+		was = prev.DNS
+	}
+	if !slices.Equal(was.Blocklists, c.DNS.Blocklists) || !slices.Equal(was.Allow, c.DNS.Allow) {
 		if out, err := s.Run.Run("systemctl", "start", "--no-block", "rollgate-blocklists.service"); err != nil {
-			fmt.Fprintf(s.Out, "note: couldn't start downloading the DNS blocklists (%v: %s); the daily timer will.\n", err, strings.TrimSpace(string(out)))
-		} else {
+			fmt.Fprintf(s.Out, "note: couldn't start updating the DNS blocklists (%v: %s); the daily timer will.\n", err, strings.TrimSpace(string(out)))
+		} else if len(c.DNS.Blocklists) > 0 {
 			fmt.Fprintln(s.Out, "Downloading the DNS blocklists in the background; rollgate status shows when they're in use.")
 		}
 	}

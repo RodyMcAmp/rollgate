@@ -138,8 +138,9 @@ func TestUpdate(t *testing.T) {
 	if strings.Contains(string(got), "home.arpa") || strings.Contains(string(got), `"good.example.com." always_null`) {
 		t.Errorf("a local or allowed name is blocked:\n%s", got)
 	}
-	if len(run.cmds) != 2 || !strings.HasPrefix(run.cmds[0], "unbound-checkconf ") || run.cmds[1] != "systemctl reload-or-restart unbound.service" {
-		t.Errorf("commands: %q", run.cmds)
+	if len(run.cmds) != 3 || !strings.HasPrefix(run.cmds[0], "unbound-checkconf ") || run.cmds[1] != "systemctl reload-or-restart unbound.service" ||
+		run.cmds[2] != "systemctl kill --signal=HUP dnsmasq.service" {
+		t.Errorf("commands: %q, want a check, Unbound's reload, and dnsmasq's cache cleared", run.cmds)
 	}
 	st, ok := ReadState(root)
 	if !ok || st.Names != 2 || len(st.Lists) != 2 || st.Lists[0].Error != "" {
@@ -213,8 +214,14 @@ func TestUpdateWithoutBlocklists(t *testing.T) {
 	if _, err := os.Stat(file); !os.IsNotExist(err) {
 		t.Error("the list file stays after dns.blocklists was removed")
 	}
-	if len(run.cmds) != 0 {
-		t.Errorf("commands without blocklists: %q", run.cmds)
+	// dnsmasq may still have blocked answers cached.
+	if len(run.cmds) != 1 || run.cmds[0] != "systemctl kill --signal=HUP dnsmasq.service" {
+		t.Errorf("commands without blocklists: %q, want dnsmasq's cache cleared", run.cmds)
+	}
+	// With no file left, a second run has nothing to clear.
+	run.cmds = nil
+	if err := Update(system(root, run, nil)); err != nil || len(run.cmds) != 0 {
+		t.Errorf("a second run without blocklists: %v %q", err, run.cmds)
 	}
 }
 

@@ -158,8 +158,12 @@ log "4. without dns.blocklists: names resolve normally, the file goes away"
 blocklist_config off | vm 'cat > /etc/rollgate/router.toml'
 vm 'rollgate apply' >/dev/null 2>&1 || die "applying without blocklists failed"
 vm 'rollgate confirm' >/dev/null || die "rollgate confirm failed"
-got=$(ask ads.test-block.example.)
-[[ $got != *"0.0.0.0"* ]] || die "still blocked after removing dns.blocklists: $got"
+# The apply starts the update in the background, which clears dnsmasq's cache.
+start=$SECONDS
+until got=$(ask ads.test-block.example.); [[ $got != *"0.0.0.0"* ]]; do
+  ((SECONDS - start < 60)) || die "still blocked a minute after removing dns.blocklists: $got"
+  sleep 2
+done
 vm 'systemctl start rollgate-blocklists.service' || die "the update without blocklists failed"
 vm 'test ! -e /etc/unbound/rollgate-blocklist.conf' || die "the list file stays without dns.blocklists"
 grep -q "DNS blocklists" <<<"$(vm 'rollgate status')" && die "status still talks about blocklists"
