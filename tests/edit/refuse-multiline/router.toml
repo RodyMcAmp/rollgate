@@ -1,0 +1,6 @@
+schema_version = 1
+
+[management]
+allowed_zones = [
+  "lan",   # where the admin sits
+]

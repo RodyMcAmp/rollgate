@@ -1,0 +1,1 @@
+[{"op": "remove", "table": "firewall.port_forward", "index": 1, "id": ["name", "plex"]}]

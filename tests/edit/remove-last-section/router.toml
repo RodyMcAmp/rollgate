@@ -1,0 +1,14 @@
+schema_version = 1
+
+[[firewall.port_forward]]
+name = "game server"
+protocol = "udp"
+wan_port = 27015
+to = "192.168.10.50:27015"
+
+[[firewall.port_forward]]
+name = "plex"
+protocol = "tcp"
+wan_port = 32400
+to = "192.168.10.5:32400"
+
