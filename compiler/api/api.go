@@ -19,6 +19,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/RodyMcAmp/rollgate/compiler/sysinfo"
 )
 
 // Backend is the router: the functions behind each request. Each writes what
@@ -29,7 +31,9 @@ type Backend struct {
 	Health func(w io.Writer) error // an error if any check fails
 	Config func() ([]byte, error)  // the current router.toml
 	// Pending is the change waiting for confirmation, or nil.
-	Pending  func() (*Pending, error)
+	Pending func() (*Pending, error)
+	// System is the kernel, uptime, memory, disk and interfaces.
+	System   func() (*sysinfo.Info, error)
 	Validate func(source []byte, w io.Writer) error
 	Diff     func(source []byte, w io.Writer) error
 	// Apply validates source, makes it router.toml and applies it with
@@ -51,11 +55,12 @@ type Request struct {
 
 // Response is every reply. OK false comes with Error, and Output says more.
 type Response struct {
-	OK      bool     `json:"ok"`
-	Output  string   `json:"output,omitempty"`
-	Error   string   `json:"error,omitempty"`
-	Config  string   `json:"config,omitempty"`  // GET /v1/config
-	Pending *Pending `json:"pending,omitempty"` // GET /v1/pending, if a change waits
+	OK      bool          `json:"ok"`
+	Output  string        `json:"output,omitempty"`
+	Error   string        `json:"error,omitempty"`
+	Config  string        `json:"config,omitempty"`  // GET /v1/config
+	Pending *Pending      `json:"pending,omitempty"` // GET /v1/pending, if a change waits
+	System  *sysinfo.Info `json:"system,omitempty"`  // GET /v1/system
 }
 
 // Pending is a change waiting for confirmation (ADR 0010).
@@ -108,6 +113,14 @@ func Handler(b Backend) http.Handler {
 			return
 		}
 		reply(w, Response{OK: true, Pending: p})
+	})
+	mux.HandleFunc("GET /v1/system", func(w http.ResponseWriter, r *http.Request) {
+		info, err := b.System()
+		if err != nil {
+			reply(w, Response{Error: err.Error()})
+			return
+		}
+		reply(w, Response{OK: true, System: info})
 	})
 	mux.Handle("POST /v1/validate", change(func(req Request, w io.Writer) error { return b.Validate([]byte(req.Config), w) }))
 	mux.Handle("POST /v1/diff", change(func(req Request, w io.Writer) error { return b.Diff([]byte(req.Config), w) }))

@@ -7,7 +7,8 @@
 #      TLS has the fingerprint web-password printed.
 #   3. Not logged in, / goes to the login page; a wrong password gets no session; the
 #      right one gets a Secure, HttpOnly, SameSite=Strict cookie, and the status page
-#      shows the health checks and the release. Port 80 redirects to HTTPS.
+#      shows the health checks, the release, the kernel version and the LAN address.
+#      Port 80 redirects to HTTPS.
 #   4. From WAN, 443 is unreachable (firewall), and the server runs unprivileged.
 #   5. router.toml edited in the browser: the check shows the change, Apply makes it
 #      pending, a confirm over a connection opened before the apply is refused, and
@@ -133,6 +134,9 @@ for flag in Secure HttpOnly SameSite=Strict; do
 done
 out=$(web /)
 [[ $out == *" 200"* && $out == *"all checks pass"* && $out == *"Release: "* ]] || die "the status page: $out"
+kernel=$(vm 'uname -r')
+[[ -n $kernel && $out == *"$kernel"* && $out == *"10.0.2.15/24"* && $out == *"Memory"* ]] ||
+  die "the overview doesn't show the kernel ($kernel), the LAN address or memory: $out"
 out=$(curl -s -m 10 -D - -o /dev/null "http://127.0.0.1:$http_port/x")
 [[ $out == *" 301"* && $out == *"Location: https://127.0.0.1/x"* ]] || die "port 80 doesn't redirect to HTTPS: $out"
 log "  login page; wrong password refused; session cookie Secure, HttpOnly, SameSite=Strict; status page; 80 redirects"

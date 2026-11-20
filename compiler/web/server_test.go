@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/RodyMcAmp/rollgate/compiler/api"
+	"github.com/RodyMcAmp/rollgate/compiler/sysinfo"
 )
 
 // fakeAPI is the router: it keeps router.toml and the pending change, and
@@ -24,6 +25,7 @@ type fakeAPI struct {
 	invalid  bool         // diff refuses every config
 	posts    []string     // "path connection" for each change asked
 	applied  string       // the last config applied
+	system   *sysinfo.Info
 }
 
 func (f *fakeAPI) Get(_ context.Context, path string) (api.Response, error) {
@@ -39,6 +41,11 @@ func (f *fakeAPI) Get(_ context.Context, path string) (api.Response, error) {
 		return api.Response{OK: true, Config: f.config}, nil
 	case "/v1/pending":
 		return api.Response{OK: true, Pending: f.pending}, nil
+	case "/v1/system":
+		if f.system == nil {
+			return api.Response{Error: "not in this test"}, nil
+		}
+		return api.Response{OK: true, System: f.system}, nil
 	}
 	return api.Response{}, errors.New("unexpected " + path)
 }

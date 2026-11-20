@@ -261,6 +261,8 @@ type page struct {
 	Reviewing bool         // a form's change is shown for review
 	Config64  string       // the reviewed router.toml, for the Apply form
 	Advanced  bool         // the error suggests the Advanced editor
+
+	System *sysView // overview: kernel, uptime, memory, disk, interfaces
 }
 
 // newPage starts a page for a logged-in session, with any pending change.
@@ -311,6 +313,7 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 	}
 	p := s.newPage(r.Context(), sess, "overview")
 	p.Nav = "status"
+	s.loadSystem(r.Context(), p)
 	if h, err := s.API.Get(r.Context(), "/v1/health"); err != nil {
 		p.Error = err.Error()
 	} else {

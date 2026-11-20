@@ -1,6 +1,43 @@
 {{template "top" .}}
 <h1>Overview</h1>
-<p class="lede">What the router runs, and whether everything works.</p>
+<p class="lede">{{with .System}}{{with .Hostname}}<span class="mono">{{.}}</span> · {{end}}{{with .Release}}release {{.}} · {{end}}{{end}}What the router runs, and whether everything works.</p>
+{{with .System}}
+<div class="tiles">
+<div class="tile"><div class="label">Kernel</div><div class="value mono">{{.Kernel}}</div></div>
+<div class="tile"><div class="label">Up for</div><div class="value">{{.Uptime}}</div></div>
+<div class="tile"><div class="label">Load</div><div class="value mono nowrap">{{.Load}}</div>{{if .Busy}}<div class="note bad">busier than its processors</div>{{else}}<div class="note">1, 5 and 15 minutes</div>{{end}}</div>
+{{with .Memory}}<div class="tile"><div class="label">Memory</div><div class="value">{{$.System.MemoryPct}}%</div><div class="note{{if $.System.MemoryHigh}} bad{{end}}">{{.}} used</div><meter class="meter" min="0" max="100" low="70" high="90" optimum="0" value="{{$.System.MemoryPct}}">{{$.System.MemoryPct}}%</meter></div>{{end}}
+{{with .Disk}}<div class="tile"><div class="label">Disk</div><div class="value">{{$.System.DiskPct}}%</div><div class="note{{if $.System.DiskHigh}} bad{{end}}">{{.}} used</div><meter class="meter" min="0" max="100" low="70" high="90" optimum="0" value="{{$.System.DiskPct}}">{{$.System.DiskPct}}%</meter></div>{{end}}
+</div>
+<section aria-labelledby="hw">
+<h2 id="hw">System</h2>
+<dl class="facts">
+{{with .Hardware}}<dt>Hardware</dt><dd>{{.}}</dd>{{end}}
+{{with .CPU}}<dt>Processor</dt><dd>{{.}}</dd>{{end}}
+<dt>Kernel</dt><dd class="mono">{{.Kernel}}</dd>
+{{with .Release}}<dt>rollgate release</dt><dd class="mono">{{.}}</dd>{{end}}
+</dl>
+</section>
+{{if .Interfaces}}
+<section aria-labelledby="ports">
+<h2 id="ports">Interfaces</h2>
+<div class="table">
+<table>
+<thead><tr><th>Name</th><th>State</th><th>Addresses</th><th>Speed</th><th>MAC</th></tr></thead>
+<tbody>
+{{range .Interfaces}}<tr>
+<td>{{.Name}}</td>
+<td>{{if .Up}}<span class="ok">up</span>{{else}}<span class="muted">{{.State}}</span>{{end}}</td>
+<td class="mono">{{range $i, $a := .Addresses}}{{if $i}}<br>{{end}}{{$a}}{{else}}<span class="muted">none</span>{{end}}</td>
+<td>{{.Speed}}</td>
+<td class="mono muted">{{.MAC}}</td>
+</tr>{{end}}
+</tbody>
+</table>
+</div>
+</section>
+{{end}}
+{{end}}
 <section>
 <h2>Health {{if .HealthOK}}<span class="ok">all checks pass</span>{{else}}<span class="bad">something needs attention</span>{{end}}</h2>
 <pre>{{.Health}}</pre>

@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/RodyMcAmp/rollgate/compiler/sysinfo"
 )
 
 // fake records what the backend was asked to do.
@@ -32,6 +34,9 @@ func (f *fake) backend() Backend {
 		},
 		Config:  func() ([]byte, error) { return []byte("schema_version = 1\n"), nil },
 		Pending: func() (*Pending, error) { return f.pending, nil },
+		System: func() (*sysinfo.Info, error) {
+			return &sysinfo.Info{Kernel: "6.12.10-arch1-1", Interfaces: []sysinfo.Interface{{Name: "wan", State: "up"}}}, nil
+		},
 		Validate: func(source []byte, w io.Writer) error {
 			note("validate %q", source)
 			return nil
@@ -99,6 +104,9 @@ func TestRequests(t *testing.T) {
 	}
 	if code, r := call(t, c, "GET", "/v1/config", ""); code != 200 || r.Config != "schema_version = 1\n" {
 		t.Errorf("config: %d %+v", code, r)
+	}
+	if code, r := call(t, c, "GET", "/v1/system", ""); code != 200 || r.System == nil || r.System.Kernel != "6.12.10-arch1-1" || len(r.System.Interfaces) != 1 {
+		t.Errorf("system: %d %+v", code, r)
 	}
 	if code, r := call(t, c, "GET", "/v1/pending", ""); code != 200 || !r.OK || r.Pending != nil {
 		t.Errorf("pending, with nothing pending: %d %+v", code, r)

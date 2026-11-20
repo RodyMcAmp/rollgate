@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -18,6 +19,7 @@ import (
 	"github.com/RodyMcAmp/rollgate/compiler/compile"
 	"github.com/RodyMcAmp/rollgate/compiler/config"
 	"github.com/RodyMcAmp/rollgate/compiler/health"
+	"github.com/RodyMcAmp/rollgate/compiler/sysinfo"
 	"github.com/RodyMcAmp/rollgate/compiler/update"
 	"github.com/RodyMcAmp/rollgate/compiler/web"
 )
@@ -53,6 +55,32 @@ func apiCmd(args []string, stderr io.Writer) int {
 	return 0
 }
 
+// interfaceAddrs lists an interface's addresses, IPv4 first, without the
+// IPv6 link-local ones every interface has.
+func interfaceAddrs(name string) []string {
+	ifc, err := net.InterfaceByName(name)
+	if err != nil {
+		return nil
+	}
+	addrs, err := ifc.Addrs()
+	if err != nil {
+		return nil
+	}
+	var v4, v6 []string
+	for _, a := range addrs {
+		ipn, ok := a.(*net.IPNet)
+		if !ok || ipn.IP.IsLinkLocalUnicast() {
+			continue
+		}
+		if ipn.IP.To4() != nil {
+			v4 = append(v4, ipn.String())
+		} else {
+			v6 = append(v6, ipn.String())
+		}
+	}
+	return append(v4, v6...)
+}
+
 // apiBackend is the router behind each API request: the CLI commands' code.
 func apiBackend() api.Backend {
 	sys := func(w io.Writer, connection string) apply.System {
@@ -79,6 +107,11 @@ func apiBackend() api.Backend {
 				return nil, err
 			}
 			return &api.Pending{Generation: p.Generation, Deadline: p.Deadline}, nil
+		},
+		System: func() (*sysinfo.Info, error) {
+			info := sysinfo.Read("/", interfaceAddrs)
+			info.Release, _ = update.RunningRelease("/")
+			return &info, nil
 		},
 		Validate: func(source []byte, w io.Writer) error {
 			if _, ok := parse(source, "router.toml", w); !ok {
