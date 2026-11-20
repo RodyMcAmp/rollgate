@@ -7,21 +7,35 @@
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-<header>
-<h1>rollgate</h1>
-<nav><a href="/">Status</a> <a href="/settings">Settings</a> <a href="/updates">Updates</a></nav>
-<form method="post" action="/logout">
+<div class="shell">
+<nav class="side" aria-label="Main">
+<div class="brand"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="1" width="22" height="22" rx="6" fill="#2F6FEB"></rect><path d="M7 15c2.5-5 7.5-5 10 0" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"></path></svg><span>rollgate</span></div>
+<a href="/"{{if eq .Nav "status"}} aria-current="page"{{end}}>Overview</a>
+<a href="/forwards"{{if eq .Nav "forwards"}} aria-current="page"{{end}}>Port forwarding</a>
+<a href="/updates"{{if eq .Nav "updates"}} aria-current="page"{{end}}>Updates</a>
+<hr>
+<a href="/settings"{{if eq .Nav "settings"}} aria-current="page"{{end}}>Advanced · router.toml</a>
+<form method="post" action="/logout" class="logout">
 <input type="hidden" name="csrf" value="{{.CSRF}}">
 <button type="submit" class="link">Log out</button>
 </form>
-</header>
-<main>
-{{with .Pending}}<p class="banner" role="status">A settings change (generation {{.Generation}}) is waiting for you to keep it{{if $.Left}}; otherwise it is undone by itself in about {{$.Left}} seconds{{end}}. <a href="/confirm">Keep or undo it</a></p>{{end}}
-{{with .Error}}<p class="error" role="alert">{{.}}</p>{{end}}
+</nav>
+<main class="content">
+{{if and .Pending (ne .Nav "confirm")}}{{with .Pending}}<div class="pending" role="status">
+{{if $.Left}}<span class="clock"><span id="left">{{$.Left}}</span> s</span>{{end}}
+<span class="what" id="countdown">Generation {{.Generation}} is live and waiting. Keep it, or it's undone by itself. If this page stops responding, the change cut you off: wait, and the previous settings come back.</span>
+<form method="post" action="/confirm" class="inline"><input type="hidden" name="csrf" value="{{$.CSRF}}"><button type="submit">Keep</button></form>
+<form method="post" action="/revert" class="inline"><input type="hidden" name="csrf" value="{{$.CSRF}}"><button type="submit" class="secondary">Undo</button></form>
+</div>
+<script src="/countdown.js" defer></script>{{end}}{{end}}
+<div class="page">
+{{with .Error}}<p class="error" role="alert">{{.}}{{if $.Advanced}} <a href="/settings">Open Advanced</a>{{end}}</p>{{end}}
 {{with .Notice}}<p class="notice" role="status">{{.}}</p>{{end}}
 {{end}}
 
-{{define "bottom"}}</main>
+{{define "bottom"}}</div>
+</main>
+</div>
 </body>
 </html>
 {{end}}

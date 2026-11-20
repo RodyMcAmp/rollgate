@@ -36,7 +36,8 @@ func (s *Server) settingsPage(w http.ResponseWriter, r *http.Request) {
 	if sess == nil {
 		return
 	}
-	p := s.newPage(r.Context(), sess, "settings")
+	p := s.newPage(r.Context(), sess, "advanced")
+	p.Nav = "settings"
 	if cur, err := s.API.Get(r.Context(), "/v1/config"); err != nil {
 		p.Error = err.Error()
 	} else if !cur.OK {
@@ -55,8 +56,15 @@ func (s *Server) settings(w http.ResponseWriter, r *http.Request) {
 	}
 	// A change runs to the end even if the browser goes away.
 	ctx := context.WithoutCancel(r.Context())
-	p := s.newPage(ctx, sess, "settings")
-	p.Config, p.Base = editorText(r), r.PostFormValue("base")
+	p := s.newPage(ctx, sess, "advanced")
+	p.Nav = "settings"
+	text, err := submittedConfig(r)
+	if err != nil {
+		p.Error = "This form was damaged on the way; reload the page and try again."
+		s.render(w, http.StatusBadRequest, "settings.html", p)
+		return
+	}
+	p.Config, p.Base = text, r.PostFormValue("base")
 	if r.PostFormValue("action") == "apply" && s.apply(ctx, w, r, p) {
 		return
 	}
@@ -143,7 +151,9 @@ func (s *Server) confirmPage(w http.ResponseWriter, r *http.Request) {
 	if sess == nil {
 		return
 	}
-	s.render(w, http.StatusOK, "confirm.html", s.newPage(r.Context(), sess, "keep the new settings?"))
+	p := s.newPage(r.Context(), sess, "keep the new settings?")
+	p.Nav = "confirm"
+	s.render(w, http.StatusOK, "confirm.html", p)
 }
 
 // confirm keeps the pending change. Only a request over a connection opened
@@ -165,6 +175,7 @@ func (s *Server) confirm(w http.ResponseWriter, r *http.Request) {
 	if !ok || !opened.After(applied) {
 		log.Printf("confirm from %s refused: its connection is older than the apply", r.RemoteAddr)
 		p := s.newPage(ctx, sess, "keep the new settings?")
+		p.Nav = "confirm"
 		p.Error = "This click came over a connection that was open before the change, so it doesn't prove the router still accepts new connections. " +
 			"Click Keep these settings again."
 		w.Header().Set("Connection", "close")
@@ -185,7 +196,7 @@ func (s *Server) revert(w http.ResponseWriter, r *http.Request) {
 	ctx := context.WithoutCancel(r.Context())
 	resp, err := s.API.Post(ctx, "/v1/revert", api.Request{})
 	s.result(ctx, w, sess, "settings undone", resp, err,
-		"The previous settings are back. Your edited text is still in router.toml: open Settings to change it and try again.")
+		"The previous settings are back. The edited router.toml is still saved on the router, not applied: Advanced shows it, to change it and try again.")
 }
 
 // result shows how a change went: done, or why not, with what it printed.

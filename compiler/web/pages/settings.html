@@ -1,4 +1,6 @@
 {{template "top" .}}
+<h1>Advanced: router.toml</h1>
+<p class="lede">The whole settings file, for anything the other pages don't cover. Changes here get the same checks and the same Keep-or-undo step.</p>
 <form method="post" action="/settings">
 <input type="hidden" name="csrf" value="{{.CSRF}}">
 <input type="hidden" name="base" value="{{.Base}}">
@@ -16,7 +18,8 @@ The file's format is described in the <a href="https://github.com/RodyMcAmp/roll
 {{if .Valid}}
 <section>
 <h2>Your changes</h2>
-{{with .Changes}}<pre class="diff">{{.}}</pre>{{else}}<p>Your text is the same as router.toml on the router.</p>{{end}}
+{{if .Changes}}<pre class="diff">{{range .ChangeLines}}<span class="{{.Class}}">{{.Text}}</span>
+{{end}}</pre>{{else}}<p>Your text is the same as router.toml on the router.</p>{{end}}
 <details>
 <summary>What changes in the router's system files</summary>
 <pre class="diff">{{.Files}}</pre>

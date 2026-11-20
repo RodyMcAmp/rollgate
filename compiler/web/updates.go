@@ -16,6 +16,7 @@ func (s *Server) updatesPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p := s.newPage(r.Context(), sess, "updates")
+	p.Nav = "updates"
 	s.loadStatus(r.Context(), p)
 	s.render(w, http.StatusOK, "updates.html", p)
 }

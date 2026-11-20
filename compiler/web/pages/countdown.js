@@ -11,6 +11,7 @@
       return;
     }
     clearInterval(timer);
+    left.textContent = 0;
     document.getElementById("countdown").textContent =
       "Time is up: the previous settings are coming back. Reload this page in a few seconds.";
   }, 1000);

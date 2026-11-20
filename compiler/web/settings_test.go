@@ -103,7 +103,7 @@ func TestEditApplyConfirm(t *testing.T) {
 	if body := w.Body.String(); !strings.Contains(body, "Keep these settings") || !strings.Contains(body, `<strong id="left">98</strong>`) {
 		t.Errorf("confirm page: want the button and 98 seconds left:\n%s", body)
 	}
-	if body := do(h, "GET", "/", nil, c).Body.String(); !strings.Contains(body, "waiting for you to keep it") {
+	if body := do(h, "GET", "/", nil, c).Body.String(); !strings.Contains(body, "is live and waiting") {
 		t.Errorf("the status page doesn't say a change is waiting:\n%s", body)
 	}
 

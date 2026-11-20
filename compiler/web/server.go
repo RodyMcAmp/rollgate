@@ -78,6 +78,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /confirm", s.confirmPage)
 	mux.HandleFunc("POST /confirm", s.confirm)
 	mux.HandleFunc("POST /revert", s.revert)
+	mux.HandleFunc("GET /forwards", s.forwardsPage)
+	mux.HandleFunc("POST /forwards", s.forwards)
 	mux.HandleFunc("GET /updates", s.updatesPage)
 	mux.HandleFunc("POST /updates/update", s.update)
 	mux.HandleFunc("POST /updates/rollback", s.rollback)
@@ -249,6 +251,16 @@ type page struct {
 	Output  string // what a request printed
 	Valid   bool   // settings: the check passed, so Apply is offered
 	Done    string // result: what happened
+
+	Nav string // the menu entry this page belongs to
+
+	Forwards  []forwardRow // port forwarding
+	Devices   []device     // port forwarding: fixed-address devices to choose from
+	Form      forwardForm  // port forwarding: the add or edit form
+	Removing  string       // port forwarding: the name of the forward being removed
+	Reviewing bool         // a form's change is shown for review
+	Config64  string       // the reviewed router.toml, for the Apply form
+	Advanced  bool         // the error suggests the Advanced editor
 }
 
 // newPage starts a page for a logged-in session, with any pending change.
@@ -297,7 +309,8 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 	if sess == nil {
 		return
 	}
-	p := s.newPage(r.Context(), sess, "status")
+	p := s.newPage(r.Context(), sess, "overview")
+	p.Nav = "status"
 	if h, err := s.API.Get(r.Context(), "/v1/health"); err != nil {
 		p.Error = err.Error()
 	} else {

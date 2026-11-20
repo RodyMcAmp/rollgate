@@ -1,0 +1,115 @@
+{{template "top" .}}
+<h1>Port forwarding</h1>
+<p class="lede">Nothing from the internet reaches your devices unless a forward lets it through, to one device at home. Every change is shown to you first, and you keep it only once you know it works.</p>
+
+{{if .Reviewing}}
+<section aria-labelledby="review">
+<h2 id="review">{{with .Removing}}Remove "{{.}}"?{{else}}Review the change{{end}}</h2>
+{{with .Output}}<pre>{{.}}</pre>{{end}}
+{{if .Valid}}
+<p class="hint">This is the change to router.toml. Nothing has changed on the router yet.</p>
+{{if .Changes}}<pre class="diff">{{range .ChangeLines}}<span class="{{.Class}}">{{.Text}}</span>
+{{end}}</pre>{{end}}
+<details>
+<summary>What changes in the router's system files</summary>
+<pre class="diff">{{.Files}}</pre>
+</details>
+{{if .Pending}}
+<p class="notice">Another change is waiting to be kept or undone. Do that first (in the bar at the top), then apply this one.</p>
+{{else}}
+<form method="post" action="/settings" class="buttons">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<input type="hidden" name="base" value="{{.Base}}">
+<input type="hidden" name="checked" value="{{.Checked}}">
+<input type="hidden" name="config64" value="{{.Config64}}">
+<button type="submit" name="action" value="apply">Apply</button>
+<a href="/forwards">Cancel</a>
+</form>
+<p class="help">After Apply, press Keep in the bar at the top. If this page stops responding, the change cut you off: wait, and it's undone by itself.</p>
+{{end}}
+{{end}}
+</section>
+{{end}}
+
+<section aria-labelledby="list">
+<h2 id="list">Forwards</h2>
+{{if .Forwards}}
+<div class="table">
+<table>
+<thead><tr><th>Name</th><th>Type</th><th>From the internet</th><th>To</th><th><span class="sr-only">Actions</span></th></tr></thead>
+<tbody>
+{{range .Forwards}}<tr>
+<td>{{.Name}}</td>
+<td class="mono">{{.Protocol}}</td>
+<td class="mono">{{.WANPort}}</td>
+<td class="mono">{{with .Device}}{{.}} · {{end}}{{.To}}</td>
+<td class="actions">
+<a href="/forwards?edit={{.Index}}#form">Edit</a>
+<form method="post" action="/forwards" class="inline">
+<input type="hidden" name="csrf" value="{{$.CSRF}}">
+<input type="hidden" name="index" value="{{.Index}}">
+<input type="hidden" name="orig_name" value="{{.Name}}">
+<button type="submit" name="action" value="remove" class="danger small" aria-label="Remove {{.Name}}">Remove</button>
+</form>
+</td>
+</tr>{{end}}
+</tbody>
+</table>
+</div>
+{{else}}
+<p class="empty">No forwards: nothing from the internet can reach your devices.</p>
+{{end}}
+</section>
+
+<section id="form" aria-labelledby="formtitle">
+<h2 id="formtitle">{{if ge .Form.Index 0}}Change "{{.Form.OrigName}}"{{else}}Add a forward{{end}}</h2>
+<form method="post" action="/forwards">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<input type="hidden" name="index" value="{{.Form.Index}}">
+<input type="hidden" name="orig_name" value="{{.Form.OrigName}}">
+<div class="fields">
+<div>
+<label for="name">Name</label>
+<input id="name" name="name" type="text" value="{{.Form.Name}}" placeholder="game server" required>
+</div>
+<fieldset>
+<legend>Type</legend>
+<div class="choices">
+<label><input type="radio" name="protocol" value="tcp"{{if eq .Form.Protocol "tcp"}} checked{{end}}>TCP</label>
+<label><input type="radio" name="protocol" value="udp"{{if eq .Form.Protocol "udp"}} checked{{end}}>UDP</label>
+<label><input type="radio" name="protocol" value="tcp+udp"{{if eq .Form.Protocol "tcp+udp"}} checked{{end}}>Both</label>
+</div>
+</fieldset>
+<div>
+<label for="wan_port">Port from the internet</label>
+<input id="wan_port" name="wan_port" type="text" inputmode="numeric" value="{{.Form.WANPort}}" placeholder="25565" required>
+<p class="help">A number, or a range such as 27015-27030.</p>
+</div>
+</div>
+<div class="fields spaced">
+<div>
+<label for="device">Device</label>
+<select id="device" name="device">
+<option value="">Another address (type it)</option>
+{{range .Devices}}<option value="{{.Address}}"{{if eq .Address $.Form.Device}} selected{{end}}>{{.Name}} · {{.Address}}</option>
+{{end}}</select>
+<p class="help">Devices with a fixed address are listed here.</p>
+</div>
+<div>
+<label for="address">Address</label>
+<input id="address" name="address" type="text" inputmode="decimal" value="{{.Form.Address}}" placeholder="192.168.10.20">
+<p class="help">Only when no device is chosen.</p>
+</div>
+<div>
+<label for="device_port">Port on the device</label>
+<input id="device_port" name="device_port" type="text" inputmode="numeric" value="{{.Form.DevicePort}}" placeholder="the same">
+<p class="help">Leave it empty for the same port.</p>
+</div>
+</div>
+<div class="buttons spaced">
+<button type="submit" name="action" value="review">Review</button>
+{{if ge .Form.Index 0}}<a href="/forwards">Cancel</a>{{end}}
+</div>
+</form>
+</section>
+{{template "bottom" .}}

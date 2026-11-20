@@ -1,4 +1,6 @@
 {{template "top" .}}
+<h1>Overview</h1>
+<p class="lede">What the router runs, and whether everything works.</p>
 <section>
 <h2>Health {{if .HealthOK}}<span class="ok">all checks pass</span>{{else}}<span class="bad">something needs attention</span>{{end}}</h2>
 <pre>{{.Health}}</pre>
@@ -7,5 +9,5 @@
 <h2>Status</h2>
 <pre>{{.Status}}</pre>
 </section>
-<p class="hint">To change the router's settings, open <a href="/settings">Settings</a>. For a new release, open <a href="/updates">Updates</a>.</p>
+<p class="hint">To let something in from the internet, open <a href="/forwards">Port forwarding</a>. For everything else, edit router.toml in <a href="/settings">Advanced</a>.</p>
 {{template "bottom" .}}

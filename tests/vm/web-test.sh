@@ -12,9 +12,11 @@
 #   5. router.toml edited in the browser: the check shows the change, Apply makes it
 #      pending, a confirm over a connection opened before the apply is refused, and
 #      one over a new connection keeps it.
-#   6. A change applied in the browser that cuts the browser off (lockout.toml)
+#   6. A port forward added on the Port forwarding page (compiler/edit, ADR 0016):
+#      reviewed, applied, kept; nftables has it, and router.toml keeps step 5's comment.
+#   7. A change applied in the browser that cuts the browser off (lockout.toml)
 #      reverts by itself, and the web UI comes back.
-#   7. A new password restarts the web UI and ends the old session.
+#   8. A new password restarts the web UI and ends the old session.
 #
 # Usage:  sudo tests/vm/web-test.sh build/rollgate-<date>.img
 # Env:    LOG_DIR, OVMF_CODE, OVMF_VARS as in boot-test.sh; PORT (default 2250: SSH,
@@ -193,7 +195,28 @@ grep -q "Running: generation 2, confirmed" <<<"$(vm 'rollgate status')" || die "
 vm 'grep -q "^# changed in the browser" /etc/rollgate/router.toml' || die "router.toml doesn't have the browser's edit"
 log "  confirmed from a new connection; router.toml has the edit"
 
-log "6. a change that cuts off the web UI reverts by itself"
+log "6. add a port forward on the Port forwarding page"
+out=$(web /forwards)
+[[ $out == *"No forwards"* ]] || die "the port forwarding page: $out"
+out=$(web /forwards --data-urlencode "csrf=$csrf" -d action=review -d index=-1 --data-urlencode "name=web server" \
+  -d protocol=tcp -d wan_port=8080 -d address=10.0.2.50 -d device_port=80)
+[[ $out == *"Review the change"* ]] || die "the forward's review: $out"
+# html/template writes + in attributes as &#43;.
+c64=$(field config64 | sed 's/&#43;/+/g')
+[[ -n $c64 ]] || die "the review offers no Apply: $out"
+out=$(web /settings --data-urlencode "csrf=$csrf" --data-urlencode "base=$(field base)" \
+  --data-urlencode "checked=$(field checked)" --data-urlencode "config64=$c64" -d action=apply)
+[[ $out == *" 303"* && $out == *"Location: /confirm"* ]] || die "applying the forward: $out"
+out=$(web /confirm --data-urlencode "csrf=$csrf")
+[[ $out == *"The new settings are kept"* ]] || die "keeping the forward: $out"
+grep -q "Running: generation 3, confirmed" <<<"$(vm 'rollgate status')" || die "generation 3 isn't confirmed: $(vm 'rollgate status')"
+grep -q "10.0.2.50:80" <<<"$(vm 'nft list ruleset')" || die "the firewall has no forward to 10.0.2.50:80"
+vm 'grep -q "^# changed in the browser" /etc/rollgate/router.toml' || die "the form's edit lost the comment from step 5"
+out=$(web /forwards)
+[[ $out == *"web server"* && $out == *"10.0.2.50:80"* ]] || die "the page doesn't list the new forward: $out"
+log "  added on the page, kept, and in the firewall; router.toml kept its comment"
+
+log "7. a change that cuts off the web UI reverts by itself"
 check_config "$here/apply/lockout.toml"
 out=$(apply_config "$here/apply/lockout.toml")
 [[ $out == *" 303"* ]] || die "applying the lockout: $out"
@@ -209,15 +232,15 @@ done
 log "  the web UI came back by itself after $((SECONDS - start)) s"
 until vm true 2>/dev/null; do ((SECONDS - start < 180)) || die "no SSH after the revert"; sleep 2; done
 status=$(vm 'rollgate status')
-if ! grep -q "Running: generation 2, confirmed" <<<"$status" || ! grep -Eq "^ +3  reverted" <<<"$status"; then
+if ! grep -q "Running: generation 3, confirmed" <<<"$status" || ! grep -Eq "^ +4  reverted" <<<"$status"; then
   die "after the revert: $status"
 fi
 out=$(web /login --data-urlencode "password=$password")
 out=$(web /)
 [[ $out == *" 200"* && $out == *"all checks pass"* ]] || die "the status page after the revert: $out"
-log "  generation 3 reverted, generation 2 runs; logged in again"
+log "  generation 4 reverted, generation 3 runs; logged in again"
 
-log "7. a new password ends the old session"
+log "8. a new password ends the old session"
 vm "echo 'another long password' | rollgate web-password --stdin" >/dev/null || die "changing the password failed"
 out=$(web /)
 [[ $out == *" 303"* && $out == *"Location: /login"* ]] || die "the old session still works after a new password: $out"
