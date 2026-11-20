@@ -181,6 +181,9 @@ install -d -m 0700 "$work/root/root/.ssh"
 install -m 0600 "$work/key.pub" "$work/root/root/.ssh/authorized_keys"
 install -m 0600 "$work/key.pub" "$work/root/etc/rollgate/secrets/admin.pub"
 install -m 0644 "$here/apply/good.toml" "$work/root/etc/rollgate/router.toml"
+# This test applies its config itself and counts generations: no first-boot apply
+# (ADR 0020), in case the previous release has it (CI builds it from this tree).
+ln -sf /dev/null "$work/root/etc/systemd/system/rollgate-firstboot.service"
 # Import into a copy of pacman's keyring and copy it back: gpg may start helpers
 # (gpg-agent, keyboxd) that would keep the mounted image busy.
 cp -a "$work/root/etc/pacman.d/gnupg" "$work/keyring"
