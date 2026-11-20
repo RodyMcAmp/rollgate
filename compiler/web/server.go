@@ -78,6 +78,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /confirm", s.confirmPage)
 	mux.HandleFunc("POST /confirm", s.confirm)
 	mux.HandleFunc("POST /revert", s.revert)
+	mux.HandleFunc("GET /networks", s.networksPage)
+	mux.HandleFunc("POST /networks", s.networks)
 	mux.HandleFunc("GET /devices", s.devicesPage)
 	mux.HandleFunc("POST /devices", s.devices)
 	mux.HandleFunc("GET /forwards", s.forwardsPage)
@@ -270,6 +272,11 @@ type page struct {
 	Fixed    []fixedRow // devices: fixed addresses
 	Online   []leaseRow // devices: current DHCP leases
 	DevForm  deviceForm // devices: the add or edit form
+
+	Nets        []netRow // networks
+	Parents     []string // networks: ports a VLAN can go on
+	HasPolicies bool     // networks: router.toml has firewall rules
+	NetForm     netForm  // networks: the add form
 }
 
 // newPage starts a page for a logged-in session, with any pending change.
