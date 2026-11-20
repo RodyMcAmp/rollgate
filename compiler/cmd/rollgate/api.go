@@ -61,6 +61,7 @@ func apiBackend() api.Backend {
 		return s
 	}
 	invalid := errors.New("invalid config; nothing was changed")
+	undo := webUndo{root: "/", config: config.DefaultPath}
 	return api.Backend{
 		Status: func(w io.Writer) error { return status(sys(w, ""), w) },
 		Health: func(w io.Writer) error {
@@ -98,17 +99,33 @@ func apiBackend() api.Backend {
 			if _, ok := parse(source, "router.toml", w); !ok {
 				return invalid
 			}
-			// router.toml is the user's file, like an edit from the CLI: if the
-			// apply is refused or reverted, the edit stays, and rollgate status
-			// says it isn't applied.
-			if err := writeConfig(config.DefaultPath, source); err != nil {
+			// The old router.toml is kept, so that Undo in the web UI can put
+			// it back (undo.go).
+			return webApply(sys(w, connection), undo, source, w)
+		},
+		Confirm: func(connection string, w io.Writer) error {
+			s := sys(w, connection)
+			n, _, pending := pendingSource(s)
+			if err := apply.Confirm(s); err != nil {
 				return err
 			}
-			return applyFile(sys(w, connection), config.DefaultPath, w)
+			if pending {
+				undo.forget(n)
+			}
+			return nil
 		},
-		Confirm: func(connection string, w io.Writer) error { return apply.Confirm(sys(w, connection)) },
-		Revert:  func(w io.Writer) error { return apply.Revert(sys(w, ""), apply.ByHand) },
-		Update:  func(date string, w io.Writer) error { return updateRouter(sys(w, ""), date) },
+		Revert: func(w io.Writer) error {
+			s := sys(w, "")
+			n, applied, pending := pendingSource(s)
+			if err := apply.Revert(s, apply.ByHand); err != nil {
+				return err
+			}
+			if !pending {
+				return nil
+			}
+			return undo.restore(n, applied, w)
+		},
+		Update: func(date string, w io.Writer) error { return updateRouter(sys(w, ""), date) },
 		// Like update, a rollback from the web UI reboots by itself: there is
 		// no shell to type reboot in.
 		Rollback: func(w io.Writer) error {

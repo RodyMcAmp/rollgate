@@ -14,6 +14,7 @@
 #      one over a new connection keeps it.
 #   6. A port forward added on the Port forwarding page (compiler/edit, ADR 0016):
 #      reviewed, applied, kept; nftables has it, and router.toml keeps step 5's comment.
+#      A second one, undone with Undo, leaves router.toml as it was (matching generation 3).
 #   7. A change applied in the browser that cuts the browser off (lockout.toml)
 #      reverts by itself, and the web UI comes back.
 #   8. A new password restarts the web UI and ends the old session.
@@ -215,6 +216,23 @@ vm 'grep -q "^# changed in the browser" /etc/rollgate/router.toml' || die "the f
 out=$(web /forwards)
 [[ $out == *"web server"* && $out == *"10.0.2.50:80"* ]] || die "the page doesn't list the new forward: $out"
 log "  added on the page, kept, and in the firewall; router.toml kept its comment"
+# Another one, undone: Undo puts router.toml back as it was.
+out=$(web /forwards --data-urlencode "csrf=$csrf" -d action=review -d index=-1 --data-urlencode "name=undo me" \
+  -d protocol=udp -d wan_port=9999 -d address=10.0.2.51)
+c64=$(field config64 | sed 's/&#43;/+/g')
+out=$(web /settings --data-urlencode "csrf=$csrf" --data-urlencode "base=$(field base)" \
+  --data-urlencode "checked=$(field checked)" --data-urlencode "config64=$c64" -d action=apply)
+[[ $out == *" 303"* ]] || die "applying the second forward: $out"
+out=$(web /revert --data-urlencode "csrf=$csrf")
+[[ $out == *"The previous settings are back"* && $out == *"router.toml is back as it was"* ]] || die "Undo: $out"
+vm 'grep -q "undo me" /etc/rollgate/router.toml' && die "Undo left the undone forward in router.toml"
+vm 'grep -q "web server" /etc/rollgate/router.toml' || die "Undo lost the kept forward from router.toml"
+status=$(vm 'rollgate status')
+if ! grep -q "Running: generation 3, confirmed" <<<"$status" || ! grep -Eq "^ +4  reverted" <<<"$status" ||
+  ! grep -q "router.toml: matches generation 3" <<<"$status"; then
+  die "after Undo: $status"
+fi
+log "  Undo of a second forward: generation 4 reverted, and router.toml matches generation 3 again"
 
 log "7. a change that cuts off the web UI reverts by itself"
 check_config "$here/apply/lockout.toml"
@@ -232,13 +250,13 @@ done
 log "  the web UI came back by itself after $((SECONDS - start)) s"
 until vm true 2>/dev/null; do ((SECONDS - start < 180)) || die "no SSH after the revert"; sleep 2; done
 status=$(vm 'rollgate status')
-if ! grep -q "Running: generation 3, confirmed" <<<"$status" || ! grep -Eq "^ +4  reverted" <<<"$status"; then
+if ! grep -q "Running: generation 3, confirmed" <<<"$status" || ! grep -Eq "^ +5  reverted" <<<"$status"; then
   die "after the revert: $status"
 fi
 out=$(web /login --data-urlencode "password=$password")
 out=$(web /)
 [[ $out == *" 200"* && $out == *"all checks pass"* ]] || die "the status page after the revert: $out"
-log "  generation 4 reverted, generation 3 runs; logged in again"
+log "  generation 5 reverted, generation 3 runs; logged in again"
 
 log "8. a new password ends the old session"
 vm "echo 'another long password' | rollgate web-password --stdin" >/dev/null || die "changing the password failed"

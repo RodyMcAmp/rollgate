@@ -107,6 +107,7 @@ The web UI (M6) changes nothing itself. It asks `rollgate api`, which runs as ro
 - **Update and rollback** reboot by themselves when they need to, since the browser has no shell to type `reboot` in. (`rollgate rollback` at the CLI still leaves the reboot to the user.)
 - **Commit-confirm:** `apply` and `confirm` carry the client's connection (the browser's address and port). An apply from one connection can't be confirmed from the same one, as with SSH.
 - **Applying:** `apply` takes the whole `router.toml`. A config that doesn't validate is refused before anything changes. Otherwise it becomes `/etc/rollgate/router.toml`, like an edit from the CLI, and is applied.
+- **Undo puts router.toml back:** unlike `rollgate revert` at the CLI, which leaves the file alone, an apply through the API keeps the old file as `/var/lib/rollgate/router.toml.before-<N>`. `revert` through the API restores it, unless `router.toml` was edited after the apply; `confirm` deletes it. An apply that doesn't go through puts the old file back at once. So after Undo, the web UI's pages show what runs. (A change the timer undoes leaves the file as the CLI would, and the next apply deletes the copy.)
 - **Logging:** every request is logged in the journal with the asking process (`journalctl -u rollgate-api`).
 - **Off by default:** the socket isn't enabled. The web UI will enable it once a web password is set.
 

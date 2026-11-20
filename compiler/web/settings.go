@@ -196,7 +196,7 @@ func (s *Server) revert(w http.ResponseWriter, r *http.Request) {
 	ctx := context.WithoutCancel(r.Context())
 	resp, err := s.API.Post(ctx, "/v1/revert", api.Request{})
 	s.result(ctx, w, sess, "settings undone", resp, err,
-		"The previous settings are back. The edited router.toml is still saved on the router, not applied: Advanced shows it, to change it and try again.")
+		"The previous settings are back.")
 }
 
 // result shows how a change went: done, or why not, with what it printed.
