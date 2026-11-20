@@ -1,6 +1,6 @@
 # 0017. The router.toml writer can insert an entry before another
 
-- Status: Proposed
+- Status: Accepted (by the maintainer, 2026-11-19)
 - Date: 2026-11-19
 - Amends: 0016
 

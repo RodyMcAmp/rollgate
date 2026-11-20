@@ -29,8 +29,8 @@ They exist so that new contributors, especially AI agents arriving with no memor
 | [0013](0013-clock-sync-timesyncd.md) | The router keeps its clock right with systemd-timesyncd | Accepted, amended by 0015 |
 | [0014](0014-web-ui.md) | The web UI: an unprivileged web server over a small root API | Accepted |
 | [0015](0015-time-server-ip-fallback.md) | Time servers by IP address as a fallback | Accepted |
-| [0016](0016-router-toml-writer.md) | How web forms change router.toml: small text edits, checked by parsing again | Accepted |
-| [0017](0017-writer-insert.md) | The router.toml writer can insert an entry before another | Proposed |
+| [0016](0016-router-toml-writer.md) | How web forms change router.toml: small text edits, checked by parsing again | Accepted, amended by 0017 |
+| [0017](0017-writer-insert.md) | The router.toml writer can insert an entry before another | Accepted |
 
 ## Template
 
