@@ -16,7 +16,7 @@
 # The VM: UEFI (Secure Boot off), 2 CPUs, 2 GB, a 32 GB disk on NVMe, and two vmxnet3
 # network adapters with fixed MAC addresses, so the config can name them:
 #   wan  00:50:56:3a:00:01  VMware's NAT network, VMnet8 (the VM's "internet")
-#   lan  00:50:56:3a:00:02  VMnet2, a host-only network of its own (192.168.50.0/24,
+#   lan  00:50:56:3a:00:02  VMnet2, a host-only network of its own (192.168.77.0/24,
 #                           VMware's DHCP off), so your PC is a LAN client and other
 #                           VMs on VMnet1 aren't affected. docs/vmware.md sets it up.
 # Two VMs made by this script share those addresses; don't run both on one network.

@@ -4,9 +4,9 @@
 #   1. image/vmware.sh turns the image into rollgate.vmx and rollgate.vmdk.
 #   2. QEMU boots the .vmdk the way the .vmx describes the VM: UEFI, the disk on NVMe,
 #      two vmxnet3 adapters with the .vmx's MAC addresses, and the LAN host at
-#      192.168.50.1 as on VMnet2.
+#      192.168.77.1 as on VMnet2.
 #   3. `rollgate apply` with the router.toml vmware.sh installed, confirmed over SSH to
-#      192.168.50.2 from a new connection, and every health check passes.
+#      192.168.77.2 from a new connection, and every health check passes.
 #
 # Usage:  sudo tests/vm/vmware-test.sh build/rollgate-<date>.img
 # Env:    LOG_DIR, OVMF_CODE, OVMF_VARS as in boot-test.sh; SSH_PORT (default 2234)
@@ -73,14 +73,14 @@ qemu-img info "$vm_dir/rollgate.vmdk" | grep -q "create type: monolithicSparse" 
 log "booting rollgate.vmdk on NVMe with two vmxnet3 adapters"
 cp "$ovmf_vars" "$work/vars.fd"
 : > "$serial"
-# lan: a QEMU user network laid out like VMnet2 (the host is 192.168.50.1). SSH reaches
-# the router at its DHCP address before the config is applied and at 192.168.50.2 after.
+# lan: a QEMU user network laid out like VMnet2 (the host is 192.168.77.1). SSH reaches
+# the router at its DHCP address before the config is applied and at 192.168.77.2 after.
 qemu-system-x86_64 -machine q35 -m 2048 -smp 2 "${accel[@]}" \
   -drive if=pflash,format=raw,readonly=on,file="$ovmf_code" \
   -drive if=pflash,format=raw,file="$work/vars.fd" \
   -drive file="$vm_dir/rollgate.vmdk",format=vmdk,if=none,id=disk -device nvme,drive=disk,serial=rollgate \
   -netdev user,id=wan,net=10.0.3.0/24 -device vmxnet3,netdev=wan,mac="$wan_mac" \
-  -netdev user,id=lan,net=192.168.50.0/24,host=192.168.50.1,dhcpstart=192.168.50.15,hostfwd=tcp:127.0.0.1:"$ssh_port"-192.168.50.15:22,hostfwd=tcp:127.0.0.1:$((ssh_port + 1))-192.168.50.2:22 \
+  -netdev user,id=lan,net=192.168.77.0/24,host=192.168.77.1,dhcpstart=192.168.77.15,hostfwd=tcp:127.0.0.1:"$ssh_port"-192.168.77.15:22,hostfwd=tcp:127.0.0.1:$((ssh_port + 1))-192.168.77.2:22 \
   -device vmxnet3,netdev=lan,mac="$lan_mac" \
   -display none -monitor none -serial file:"$serial" &
 qemu_pid=$!
@@ -99,7 +99,7 @@ until vm "$ssh_port" true 2>/dev/null; do
 done
 
 log "applying the VMware router.toml"
-# The apply moves lan from its DHCP address to 192.168.50.2, which ends this SSH
+# The apply moves lan from its DHCP address to 192.168.77.2, which ends this SSH
 # session, so it runs detached and leaves its output in a file.
 vm "$ssh_port" 'nohup rollgate apply >/root/apply.log 2>&1 </dev/null &' ||
   die "couldn't start rollgate apply"
@@ -107,12 +107,12 @@ deadline=$((SECONDS + 60))
 until out=$(vm "$((ssh_port + 1))" 'rollgate confirm' 2>&1); do
   if ((SECONDS >= deadline)); then
     log=$(vm "$ssh_port" 'cat /root/apply.log' 2>&1) || true
-    die "no confirm over SSH to 192.168.50.2 after the apply: $out
+    die "no confirm over SSH to 192.168.77.2 after the apply: $out
 apply's output: $log"
   fi
   sleep 3
 done
-log "  confirmed from a new connection to 192.168.50.2"
+log "  confirmed from a new connection to 192.168.77.2"
 out=$(vm "$((ssh_port + 1))" 'rollgate health -wait 120' 2>&1) || die "health checks failed:
 $out"
 log "  every health check passes"
