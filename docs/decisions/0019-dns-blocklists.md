@@ -1,6 +1,6 @@
 # 0019. DNS blocklists in Unbound, refreshed by a timer
 
-- Status: Proposed
+- Status: Accepted (by the maintainer, 2026-11-19)
 - Date: 2026-11-19
 
 ## Context

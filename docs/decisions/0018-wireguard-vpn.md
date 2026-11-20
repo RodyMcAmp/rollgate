@@ -1,6 +1,6 @@
 # 0018. A WireGuard VPN for reaching home from outside
 
-- Status: Proposed
+- Status: Accepted (by the maintainer, 2026-11-19)
 - Date: 2026-11-19
 
 ## Context

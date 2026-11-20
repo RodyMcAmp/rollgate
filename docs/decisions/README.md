@@ -31,8 +31,8 @@ They exist so that new contributors, especially AI agents arriving with no memor
 | [0015](0015-time-server-ip-fallback.md) | Time servers by IP address as a fallback | Accepted |
 | [0016](0016-router-toml-writer.md) | How web forms change router.toml: small text edits, checked by parsing again | Accepted, amended by 0017 |
 | [0017](0017-writer-insert.md) | The router.toml writer can insert an entry before another | Accepted |
-| [0018](0018-wireguard-vpn.md) | A WireGuard VPN for reaching home from outside | Proposed |
-| [0019](0019-dns-blocklists.md) | DNS blocklists in Unbound, refreshed by a timer | Proposed |
+| [0018](0018-wireguard-vpn.md) | A WireGuard VPN for reaching home from outside | Accepted |
+| [0019](0019-dns-blocklists.md) | DNS blocklists in Unbound, refreshed by a timer | Accepted |
 
 ## Template
 
