@@ -13,13 +13,14 @@ name = "wan"
 match_mac = "00:50:56:3a:00:01"
 ipv4 = "dhcp"
 
-# VMnet2: a host-only network set to 192.168.50.0/24 with VMware's DHCP turned off.
-# Your PC is 192.168.50.1 on it; the router is 192.168.50.2.
+# VMnet2: a host-only network set to 192.168.77.0/24 with VMware's DHCP turned off.
+# Your PC is 192.168.77.1 on it; the router is 192.168.77.2. The range must differ from
+# your home network's (docs/vmware.md); 192.168.77.x is rarely used by home routers.
 [[interface]]
 name = "lan"
 match_mac = "00:50:56:3a:00:02"
-ipv4 = "192.168.50.2/24"
+ipv4 = "192.168.77.2/24"
 
 # Other VMs on VMnet2 get an address here and reach the internet through the router.
 [dhcp.lan]
-range = ["192.168.50.100", "192.168.50.199"]
+range = ["192.168.77.100", "192.168.77.199"]

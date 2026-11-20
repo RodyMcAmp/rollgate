@@ -7,7 +7,7 @@ What you get:
 
 - A VM with two network ports, like a small router:
   - **wan** on VMware's NAT network: the router's "internet", through your PC.
-  - **lan** on a host-only network of its own, **VMnet2** (192.168.50.0/24). Your PC is a LAN client at 192.168.50.1; the router is 192.168.50.2.
+  - **lan** on a host-only network of its own, **VMnet2** (192.168.77.0/24). Your PC is a LAN client at 192.168.77.1; the router is 192.168.77.2.
     Your other VMs, on VMnet1 or VMnet8, aren't affected.
 - Your SSH key installed, and a ready `router.toml` for those networks ([image/vmware/router.toml](../image/vmware/router.toml)).
 
@@ -19,10 +19,17 @@ What you get:
    - **Host-only** is selected.
    - **Connect a host virtual network adapter to this network** is ticked.
    - **Use local DHCP service** is **not** ticked. The router hands out addresses on its LAN, as a real one does.
-   - **Subnet IP:** `192.168.50.0`, **Subnet mask:** `255.255.255.0`.
+   - **Subnet IP:** `192.168.77.0`, **Subnet mask:** `255.255.255.0`.
 4. Click **OK**.
 
 If VMnet2 is already used for something else, pick another free VMnet number and change `ethernet1.vnet` in the VM's `rollgate.vmx` to match.
+
+VMnet2's range must differ from your home network's, or your PC sends the router's traffic to your home network instead and SSH times out ("Destination host unreachable").
+192.168.77.0/24 is rarely used by home routers; check yours with `ipconfig` in PowerShell.
+If your home network does use 192.168.77.x, pick another range here and change the addresses in `image/vmware/router.toml` to match before `make vmware`.
+
+**Set up VMnet2 as 192.168.50.0/24 before?** That range collides with some home routers (ASUS routers use it out of the box), so it changed.
+Change VMnet2's **Subnet IP** to `192.168.77.0` as in step 3, then make the VM again with `make vmware` (an older VM's `router.toml` still uses 192.168.50.2).
 
 ## 2. Create an SSH key (once)
 
@@ -81,7 +88,7 @@ Either way you get a folder `rollgate-<date>` with `rollgate.vmx` and `rollgate.
 In PowerShell:
 
 ```
-ssh -i $HOME\.ssh\rollgate_ed25519 root@192.168.50.2
+ssh -i $HOME\.ssh\rollgate_ed25519 root@192.168.77.2
 ```
 
 Then, on the router:
@@ -93,10 +100,10 @@ rollgate status        the config generation, the release, and the last update
 
 ## Things to try
 
-- **The web UI** (from a release that has it): run `rollgate web-password` on the router and pick a password of at least 10 characters. Then open `https://192.168.50.2/` in your browser on the PC.
+- **The web UI** (from a release that has it): run `rollgate web-password` on the router and pick a password of at least 10 characters. Then open `https://192.168.77.2/` in your browser on the PC.
   The browser warns about the certificate, because the router made it itself. Compare the fingerprint the browser shows (click the warning, then the certificate details) with the one `rollgate web-password` printed, then accept it.
-- **Lock yourself out on purpose:** in `/etc/rollgate/router.toml`, change lan's `ipv4` to `"192.168.50.3/24"` and run `rollgate apply` over SSH. Your session stops working, because the router left 192.168.50.2. Don't confirm: 2 minutes later the old config comes back by itself, and `ssh root@192.168.50.2` works again.
-- **A LAN client:** give another VM a network adapter on VMnet2. It gets an address from the router (192.168.50.100–199) and reaches the internet through it.
+- **Lock yourself out on purpose:** in `/etc/rollgate/router.toml`, change lan's `ipv4` to `"192.168.77.3/24"` and run `rollgate apply` over SSH. Your session stops working, because the router left 192.168.77.2. Don't confirm: 2 minutes later the old config comes back by itself, and `ssh root@192.168.77.2` works again.
+- **A LAN client:** give another VM a network adapter on VMnet2. It gets an address from the router (192.168.77.100–199) and reaches the internet through it.
 - **Updates:** `rollgate update` installs the newest release once there is one newer than the VM's, with a trial boot and automatic rollback (ADR 0011).
 - **The recovery runbook:** [runbooks/recovery.md](runbooks/recovery.md) works the same in the VM. The GRUB menu shows for 5 seconds at boot.
 - **Snapshots:** VMware's own snapshots (**VM → Snapshot**) are a quick way back if an experiment goes wrong.
