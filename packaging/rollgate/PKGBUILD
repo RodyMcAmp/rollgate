@@ -21,7 +21,15 @@ package() {
     "$startdir/rollgate-boot.service" "$startdir/rollgate-health.service" \
     "$startdir/rollgate-api.socket" "$startdir/rollgate-api.service" \
     "$startdir/rollgate-web.socket" "$startdir/rollgate-web.service" \
-    "$startdir/rollgate-blocklists.service" "$startdir/rollgate-blocklists.timer"
+    "$startdir/rollgate-blocklists.service" "$startdir/rollgate-blocklists.timer" \
+    "$startdir/rollgate-firstboot.service"
+  # ADR 0020: the first boot applies router.toml by itself, and the console asks for
+  # the router's password before its first login prompt. The unit's condition keeps
+  # it from running on routers that already have a config.
+  install -dm0755 "$pkgdir/usr/lib/systemd/system/multi-user.target.wants"
+  ln -s ../rollgate-firstboot.service "$pkgdir/usr/lib/systemd/system/multi-user.target.wants/rollgate-firstboot.service"
+  install -Dm0644 "$startdir/getty-setup.conf" "$pkgdir/usr/lib/systemd/system/getty@.service.d/10-rollgate-setup.conf"
+  install -Dm0644 "$startdir/serial-getty-setup.conf" "$pkgdir/usr/lib/systemd/system/serial-getty@.service.d/10-rollgate-setup.conf"
   # ADR 0019: the DNS blocklists' daily update. With no blocklists set, a run
   # only tidies up and exits.
   install -dm0755 "$pkgdir/usr/lib/systemd/system/timers.target.wants"

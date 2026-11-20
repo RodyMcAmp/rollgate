@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/RodyMcAmp/rollgate/compiler/api"
-	"github.com/RodyMcAmp/rollgate/compiler/apply"
 	"github.com/RodyMcAmp/rollgate/compiler/config"
 	"github.com/RodyMcAmp/rollgate/compiler/health"
 	"github.com/RodyMcAmp/rollgate/compiler/web"
@@ -41,28 +40,15 @@ func webPasswordCmd(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "rollgate web-password: must run as root")
 		return 1
 	}
-	var password string
-	var err error
-	if *fromStdin {
-		password, err = bufio.NewReader(os.Stdin).ReadString('\n')
-		if errors.Is(err, io.EOF) && password != "" {
-			err = nil
-		}
-		password = strings.TrimRight(password, "\r\n")
-	} else {
-		password, err = askPassword(stdout)
-	}
+	password, err := readPassword(*fromStdin, "New web password", stdout)
+	var fp string
+	var created bool
+	var ips []netip.Addr
 	if err == nil {
-		err = web.SetPassword("/", password)
+		fp, created, ips, err = setWebPassword(password)
 	}
 	if err != nil {
 		fmt.Fprintf(stderr, "rollgate web-password: %v\n", err)
-		return 1
-	}
-	names, ips := certNames("/")
-	fp, created, err := web.EnsureCert("/", names, ips, time.Now())
-	if err != nil {
-		fmt.Fprintf(stderr, "rollgate web-password: the password is set, but making the HTTPS certificate failed: %v\n", err)
 		return 1
 	}
 	fmt.Fprintln(stdout, "Web password set.")
@@ -71,23 +57,10 @@ func webPasswordCmd(args []string, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintf(stdout, "Before accepting it, check that the browser shows this fingerprint (SHA-256):\n  %s\n", fp)
 	fmt.Fprintln(stdout, "rollgate status shows it again.")
-	// Turn the web UI on, and restart it if it runs, so it uses the new
-	// password and every old session ends.
-	run := apply.Exec{}
-	for _, cmd := range [][]string{
-		{"systemctl", "enable", "--now", "rollgate-api.socket", "rollgate-web.socket"},
-		{"systemctl", "try-restart", "rollgate-web.service"},
-	} {
-		if out, err := run.Run(cmd[0], cmd[1:]...); err != nil {
-			fmt.Fprintf(stderr, "rollgate web-password: the password is set, but %s failed: %v\n%s", strings.Join(cmd, " "), err, out)
-			return 1
-		}
+	if err := writeIssue("/"); err != nil {
+		fmt.Fprintf(stderr, "note: couldn't update the login prompt's text: %v\n", err)
 	}
-	if len(ips) == 0 {
-		fmt.Fprintln(stdout, "The web UI is on: open https://<the router's LAN address>/ from a computer in a management zone.")
-	} else {
-		fmt.Fprintf(stdout, "The web UI is on: open https://%s/ from a computer in a management zone.\n", ips[0])
-	}
+	fmt.Fprintf(stdout, "The web UI is on: open %s from a computer in a management zone.\n", webAddress(ips))
 	return 0
 }
 
@@ -175,8 +148,9 @@ func webCmd(args []string, stderr io.Writer) int {
 	return fail(<-errs)
 }
 
-// askPassword reads the password twice from the terminal, without echo.
-func askPassword(stdout io.Writer) (string, error) {
+// askPassword reads the password twice from the terminal, without echo, after
+// prompt (e.g. "New password").
+func askPassword(stdout io.Writer, prompt string) (string, error) {
 	if info, err := os.Stdin.Stat(); err != nil || info.Mode()&os.ModeCharDevice == 0 {
 		return "", errors.New("standard input isn't a terminal; use --stdin to read the password from it")
 	}
@@ -201,7 +175,7 @@ func askPassword(stdout io.Writer) (string, error) {
 		fmt.Fprintln(stdout)
 		return strings.TrimRight(line, "\r\n"), err
 	}
-	first, err := read(fmt.Sprintf("New web password (at least %d characters): ", web.MinPassword))
+	first, err := read(fmt.Sprintf("%s (at least %d characters): ", prompt, web.MinPassword))
 	if err != nil {
 		return "", err
 	}

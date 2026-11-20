@@ -83,6 +83,8 @@ jobs:
         run: make test-blocklists
       - name: L3 VPN test
         run: make test-vpn
+      - name: L3 first-boot test
+        run: make test-firstboot
       - name: Keep serial logs
         if: always()
         uses: actions/upload-artifact@v6

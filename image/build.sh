@@ -289,8 +289,8 @@ systemctl disable systemd-networkd-wait-online.service
 # The image is preconfigured; firstboot would block boot waiting for console input.
 systemctl mask systemd-firstboot.service
 
-# Console login: no root password until the owner sets one (/etc/issue says so), as on
-# OpenWrt. SSH never accepts it (key-only). Don't expire it instead: an expired password
+# Console login: no root password until the owner chooses one on the setup screen
+# before the first login prompt (rollgate setup, ADR 0020). SSH never accepts it (key-only). Don't expire it instead: an expired password
 # makes sshd refuse key logins too ("Password change required but no TTY available").
 passwd -d root >/dev/null
 CHROOT

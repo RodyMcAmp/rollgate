@@ -5,8 +5,9 @@
 #   2. QEMU boots the .vmdk the way the .vmx describes the VM: UEFI, the disk on NVMe,
 #      two vmxnet3 adapters with the .vmx's MAC addresses, and the LAN host at
 #      192.168.77.1 as on VMnet2.
-#   3. `rollgate apply` with the router.toml vmware.sh installed, confirmed over SSH to
-#      192.168.77.2 from a new connection, and every health check passes.
+#   3. The first boot applies the router.toml vmware.sh installed and keeps it by itself
+#      (ADR 0020): SSH answers at 192.168.77.2, generation 1 is confirmed, every health
+#      check passes, and the console asks for the router's password.
 #
 # Usage:  sudo tests/vm/vmware-test.sh build/rollgate-<date>.img
 # Env:    LOG_DIR, OVMF_CODE, OVMF_VARS as in boot-test.sh; SSH_PORT (default 2234)
@@ -74,7 +75,8 @@ log "booting rollgate.vmdk on NVMe with two vmxnet3 adapters"
 cp "$ovmf_vars" "$work/vars.fd"
 : > "$serial"
 # lan: a QEMU user network laid out like VMnet2 (the host is 192.168.77.1). SSH reaches
-# the router at its DHCP address before the config is applied and at 192.168.77.2 after.
+# the router at 192.168.77.2 once the first boot applied the config; the DHCP address's
+# port is for looking around if it didn't.
 qemu-system-x86_64 -machine q35 -m 2048 -smp 2 "${accel[@]}" \
   -drive if=pflash,format=raw,readonly=on,file="$ovmf_code" \
   -drive if=pflash,format=raw,file="$work/vars.fd" \
@@ -91,28 +93,26 @@ vm() {
     -o LogLevel=ERROR -o ConnectTimeout=5 -o ServerAliveInterval=5 -o ServerAliveCountMax=3 \
     -o BatchMode=yes root@127.0.0.1 "$@"
 }
+log "the first boot applies the VMware router.toml by itself"
 deadline=$((SECONDS + timeout_s))
-until vm "$ssh_port" true 2>/dev/null; do
-  ((SECONDS < deadline)) || die "no SSH within ${timeout_s}s (serial log: $serial)"
+until vm "$((ssh_port + 1))" 'systemctl is-active -q rollgate-firstboot' 2>/dev/null; do
+  if ((SECONDS >= deadline)); then
+    out=$(vm "$ssh_port" 'journalctl -b -u rollgate-firstboot --no-pager | tail -30' 2>&1) || true
+    die "no SSH at 192.168.77.2 with the first boot done within ${timeout_s}s (serial log: $serial)
+rollgate-firstboot over the DHCP address: $out"
+  fi
   kill -0 "$qemu_pid" 2>/dev/null || die "QEMU exited (serial log: $serial)"
   sleep 3
 done
-
-log "applying the VMware router.toml"
-# The apply moves lan from its DHCP address to 192.168.77.2, which ends this SSH
-# session, so it runs detached and leaves its output in a file.
-vm "$ssh_port" 'nohup rollgate apply >/root/apply.log 2>&1 </dev/null &' ||
-  die "couldn't start rollgate apply"
+[[ $(vm "$((ssh_port + 1))" 'cat /var/lib/rollgate/current; test -e /var/lib/rollgate/pending && echo pending') == 1 ]] ||
+  die "generation 1 isn't the confirmed config: $(vm "$((ssh_port + 1))" 'rollgate status' 2>&1)"
+log "  SSH answers at 192.168.77.2, and generation 1 is kept"
 deadline=$((SECONDS + 60))
-until out=$(vm "$((ssh_port + 1))" 'rollgate confirm' 2>&1); do
-  if ((SECONDS >= deadline)); then
-    log=$(vm "$ssh_port" 'cat /root/apply.log' 2>&1) || true
-    die "no confirm over SSH to 192.168.77.2 after the apply: $out
-apply's output: $log"
-  fi
-  sleep 3
+until grep -q "Choose a password for this router" "$serial"; do
+  ((SECONDS < deadline)) || die "the serial console doesn't ask for the router's password (serial log: $serial)"
+  sleep 2
 done
-log "  confirmed from a new connection to 192.168.77.2"
+log "  the console asks for the router's password"
 out=$(vm "$((ssh_port + 1))" 'rollgate health -wait 120' 2>&1) || die "health checks failed:
 $out"
 log "  every health check passes"

@@ -79,8 +79,17 @@ health (docs/architecture.md#health-checks):
   check NAME               run one built-in check (` + "firewall, wan, dns, ssh, services" + `);
                            the scripts in health.d call this
 
+the router's password (ADR 0020):
+  password [--stdin]       change the router's password, for the console (root)
+                           and the web UI (asked twice, or one line from stdin)
+  firstboot                apply router.toml at the first boot and keep it if the
+                           health checks pass (rollgate-firstboot.service runs it)
+  setup [-- PROGRAM ARGS]  on a console: ask for the router's password if root has
+                           none yet, then run PROGRAM (the getty units run it, with
+                           agetty as PROGRAM)
+
 web UI (ADR 0014):
-  web-password [--stdin]   set the web UI's admin password (asked twice, or one
+  web-password [--stdin]   set only the web UI's admin password (asked twice, or one
                            line from stdin), make its HTTPS certificate if there
                            is none (prints its fingerprint), and turn the web UI on
   web                      the web UI's server (rollgate-web.service runs it)
@@ -212,6 +221,12 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return healthCmd(args[1:], stdout, stderr)
 	case "api":
 		return apiCmd(args[1:], stderr)
+	case "password":
+		return passwordCmd(args[1:], stdout, stderr)
+	case "firstboot":
+		return firstbootCmd(args[1:], stdout, stderr)
+	case "setup":
+		return setupCmd(args[1:], stdout, stderr)
 	case "web-password":
 		return webPasswordCmd(args[1:], stdout, stderr)
 	case "web":

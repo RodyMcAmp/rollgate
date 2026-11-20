@@ -116,6 +116,15 @@ The commit-confirm flow (ADR 0010; `rollgate apply`, `confirm` and `revert`) gua
 
 Changes that cannot affect reachability (a DNS blocklist, for example) still use this flow. One code path is easier to test than two.
 
+### First boot (ADR 0020)
+
+A new router sets itself up, so nobody has to type `rollgate apply` and `confirm` before it works:
+
+- **The first apply:** `rollgate-firstboot.service` runs `rollgate firstboot` at boot while no generation exists yet (`/var/lib/rollgate/generations/` is empty) and `/etc/rollgate/router.toml` exists. It applies the config as above, then runs the health checks every 5 s (during a confirm window the checks test the pending config, the one installed, not the last confirmed one), and keeps it (confirms) once all pass, or once all but WAN's pass: WAN depends on the ISP, and undoing the config wouldn't bring the internet back; WAN gets 30 s more first. It decides 10 s before the revert timer would fire. If a check fails, it reverts, and the router runs with the image's defaults. This is the one apply confirmed by the health checks instead of a new connection: before it, no config ever ran, so no management access can be lost. Routers that already have a config, including ones that get this through an update, never run it.
+- **What it did** goes to the journal, the boot console (the serial port when there is one) and the screen (tty1), and into `/run/rollgate/firstboot` for the setup screen.
+- **The router's password:** the console's getty units run `rollgate setup -- agetty ...` in place of agetty (drop-ins for `getty@` and `serial-getty@`). While root has no password, it asks for one (twice, at least 10 characters), shows what the first boot did, and stops asking if another console sets it meanwhile. The password becomes both root's (`chpasswd`, hashed as `/etc/login.defs` says) and the web UI's (as `rollgate web-password` sets it, which also makes the certificate and turns the web UI on). SSH stays key-only. Then it writes `/run/issue.d/50-rollgate.issue`, which the login prompt shows (the web UI's address and certificate fingerprint, and a note if the first boot undid the settings), and becomes agetty. It runs as the unit's main process, so the boot finishes while the screen waits for someone to type.
+- **Changing it later:** `rollgate password` changes both. `rollgate web-password` changes only the web UI's.
+
 ### The local API (`rollgate api`, ADR 0014)
 
 The web UI (M6) changes nothing itself. It asks `rollgate api`, which runs as root and calls the same code as the CLI:
@@ -131,7 +140,7 @@ The web UI (M6) changes nothing itself. It asks `rollgate api`, which runs as ro
 
 ### Web password and certificate (`rollgate web-password`, ADR 0014)
 
-`rollgate web-password` (as root, at the console or over SSH) sets the web UI's one admin password. It asks twice without echo; `--stdin` reads one line instead, for scripts.
+`rollgate web-password` (as root, at the console or over SSH) sets the web UI's one admin password. It asks twice without echo; `--stdin` reads one line instead, for scripts. The first boot's setup screen and `rollgate password` set it the same way, together with root's password (ADR 0020).
 
 - **The password** must be at least 10 characters. Only a hash is kept: salted PBKDF2-HMAC-SHA256, 600,000 iterations (Go's standard library), in `/etc/rollgate/secrets/web-password`, mode 0600.
 - **The certificate:** the first time, it also makes the web UI's HTTPS certificate and key (`web.crt`, `web.key`, ECDSA P-256, self-signed, valid 10 years). The certificate covers the router's host name and the static addresses of its management zones from the running config.

@@ -1,5 +1,5 @@
 rollgate \r (\l)
 
-Log in as root. If you haven't set a root password yet, set one now: passwd
+Log in as root, with the router's password. To change it: rollgate password
 Recovery steps: docs/runbooks/recovery.md (keep a printed copy with the router)
 
