@@ -27,6 +27,7 @@ type fakeAPI struct {
 	applied  string       // the last config applied
 	system   *sysinfo.Info
 	leases   []sysinfo.Lease
+	vpn      *api.VPNState
 }
 
 func (f *fakeAPI) Get(_ context.Context, path string) (api.Response, error) {
@@ -42,6 +43,11 @@ func (f *fakeAPI) Get(_ context.Context, path string) (api.Response, error) {
 		return api.Response{OK: true, Config: f.config}, nil
 	case "/v1/pending":
 		return api.Response{OK: true, Pending: f.pending}, nil
+	case "/v1/vpn":
+		if f.vpn == nil {
+			return api.Response{OK: true, VPN: &api.VPNState{}}, nil
+		}
+		return api.Response{OK: true, VPN: f.vpn}, nil
 	case "/v1/leases":
 		return api.Response{OK: true, Leases: f.leases}, nil
 	case "/v1/system":
@@ -73,6 +79,12 @@ func (f *fakeAPI) Post(_ context.Context, path string, req api.Request) (api.Res
 			return api.Response{Error: "nothing is waiting for confirmation"}, nil
 		}
 		f.pending = nil
+		return api.Response{OK: true}, nil
+	case "/v1/vpn/key":
+		if f.vpn == nil {
+			f.vpn = &api.VPNState{}
+		}
+		f.vpn.PublicKey = "HIgo9xNzJMWLKASShiTqIybxZ0U3wGLiUeJ1PKf8ykw="
 		return api.Response{OK: true}, nil
 	case "/v1/update":
 		return api.Response{OK: true, Output: "Already on the newest release, 2026-11-16.\n"}, nil

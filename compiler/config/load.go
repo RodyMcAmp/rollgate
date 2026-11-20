@@ -80,6 +80,13 @@ func applyDefaults(c *Config, md toml.MetaData) {
 	if !md.IsDefined("ipv6", "wan_prefix_hint") {
 		c.IPv6.WANPrefixHint = 56
 	}
+	if c.VPN != nil {
+		if !md.IsDefined("vpn", "port") {
+			c.VPN.Port = 51820
+		}
+		set(&c.VPN.Address, "10.66.0.1/24", "vpn", "address")
+		set(&c.VPN.Reach, "everything", "vpn", "reach")
+	}
 	for i := range c.Interfaces {
 		if c.Interfaces[i].Zone == "" {
 			c.Interfaces[i].Zone = c.Interfaces[i].Name

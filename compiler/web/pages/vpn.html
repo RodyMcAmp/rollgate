@@ -1,0 +1,131 @@
+{{template "top" .}}
+<h1>VPN</h1>
+<p class="lede">Reach home from anywhere: a phone or laptop with the WireGuard app connects to the router and uses your home networks, or your home internet connection on public Wi-Fi.</p>
+
+{{if .Reviewing}}
+<section aria-labelledby="review">
+<h2 id="review">{{with .Removing}}Remove "{{.}}" from the VPN?{{else}}Review the change{{end}}</h2>
+{{with .Output}}<pre>{{.}}</pre>{{end}}
+{{if .Valid}}
+{{with .VPNNew}}
+<div class="notice-block">
+<h3>The configuration for "{{.Name}}": save it now</h3>
+<p>Import this into the device's WireGuard app (Add tunnel, then import from a file, or create it from this text). <strong>It's shown only now</strong>: the router doesn't keep the device's private key, so this page can't show it again. It starts working once you Apply and Keep the change below.</p>
+<pre class="diff">{{.Config}}</pre>
+<form method="post" action="/vpn/download" class="buttons">
+<input type="hidden" name="csrf" value="{{$.CSRF}}">
+<input type="hidden" name="name" value="{{.Name}}">
+<input type="hidden" name="config" value="{{.Config}}">
+<button type="submit" class="secondary">Download {{.Name}}.conf</button>
+</form>
+</div>
+{{end}}
+<p class="hint">This is the change to router.toml. Nothing has changed on the router yet.</p>
+{{if .Changes}}<pre class="diff">{{range .ChangeLines}}<span class="{{.Class}}">{{.Text}}</span>
+{{end}}</pre>{{end}}
+<details>
+<summary>What changes in the router's system files</summary>
+<pre class="diff">{{.Files}}</pre>
+</details>
+{{if .Pending}}
+<p class="notice">Another change is waiting to be kept or undone. Do that first (in the bar at the top), then apply this one.</p>
+{{else}}
+<form method="post" action="/settings" class="buttons">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<input type="hidden" name="base" value="{{.Base}}">
+<input type="hidden" name="checked" value="{{.Checked}}">
+<input type="hidden" name="config64" value="{{.Config64}}">
+<button type="submit" name="action" value="apply">Apply</button>
+<a href="/vpn">Cancel</a>
+</form>
+<p class="help">After Apply, press Keep in the bar at the top.</p>
+{{end}}
+{{end}}
+</section>
+{{end}}
+
+{{with .VPN}}
+{{if .On}}
+<section aria-labelledby="state">
+<h2 id="state">The VPN is on</h2>
+<dl class="facts">
+<dt>Devices connect to</dt><dd class="mono">{{with .Endpoint}}{{.}}{{else}}<span class="muted">unknown</span>{{end}}</dd>
+<dt>They reach</dt><dd>{{if eq .Reach "internet"}}the internet only, through home{{else}}everything: the internet and your home networks{{end}}</dd>
+<dt>Router's address in it</dt><dd class="mono">{{.Address}}</dd>
+{{with .RouterKey}}<dt>Router's public key</dt><dd class="mono">{{.}}</dd>{{end}}
+</dl>
+{{with .Notice}}<p class="notice">{{.}}</p>{{end}}
+</section>
+
+<section aria-labelledby="devices">
+<h2 id="devices">Devices</h2>
+{{if .Devices}}
+<div class="table">
+<table>
+<thead><tr><th>Name</th><th>Address</th><th>Last connected</th><th><span class="sr-only">Actions</span></th></tr></thead>
+<tbody>
+{{range .Devices}}<tr>
+<td>{{.Name}}</td>
+<td class="mono">{{.Address}}</td>
+<td>{{.LastSeen}}</td>
+<td class="actions">
+<form method="post" action="/vpn" class="inline">
+<input type="hidden" name="csrf" value="{{$.CSRF}}">
+<input type="hidden" name="index" value="{{.Index}}">
+<input type="hidden" name="name" value="{{.Name}}">
+<button type="submit" name="action" value="remove" class="danger small" aria-label="Remove {{.Name}}">Remove</button>
+</form>
+</td>
+</tr>{{end}}
+</tbody>
+</table>
+</div>
+{{else}}
+<p class="empty">No devices yet: add one below.</p>
+{{end}}
+</section>
+
+<section id="form" aria-labelledby="addtitle">
+<h2 id="addtitle">Add a device</h2>
+<form method="post" action="/vpn">
+<input type="hidden" name="csrf" value="{{$.CSRF}}">
+<div class="fields">
+<div>
+<label for="name">Name</label>
+<input id="name" name="name" type="text" placeholder="maya-phone" autocapitalize="off" required>
+</div>
+<fieldset>
+<legend>What goes through the VPN</legend>
+<div class="choices">
+<label><input type="radio" name="traffic" value="everything" checked>Everything</label>
+<label><input type="radio" name="traffic" value="home">Only home</label>
+</div>
+<p class="help">"Everything" also protects you on public Wi-Fi. "Only home" sends just your home networks' traffic through the router.</p>
+</fieldset>
+</div>
+<div class="buttons spaced"><button type="submit" name="action" value="add">Review</button></div>
+</form>
+</section>
+
+<section aria-labelledby="mgmt">
+<h2 id="mgmt">Manage the router over the VPN</h2>
+<form method="post" action="/vpn">
+<input type="hidden" name="csrf" value="{{$.CSRF}}">
+<label class="check"><input type="checkbox" name="managed" value="on"{{if .Managed}} checked{{end}}> Devices on the VPN can open this page and SSH</label>
+<p class="help">Your home network keeps that access too: the router never depends on the VPN to be managed.</p>
+<div class="buttons"><button type="submit" name="action" value="manage" class="secondary">Review</button></div>
+</form>
+</section>
+{{else}}
+<section aria-labelledby="off">
+<h2 id="off">The VPN is off</h2>
+<p>Turning it on opens one UDP port on the internet side (51820). WireGuard answers nothing to anyone without a device key you added, so the port stays invisible to scans. Then add your devices here.</p>
+<p class="help">Some internet connections share one address between many customers (carrier-grade NAT); then no home VPN can be reached from outside, and this page will say so.</p>
+<form method="post" action="/vpn">
+<input type="hidden" name="csrf" value="{{$.CSRF}}">
+<div class="buttons"><button type="submit" name="action" value="on">Review: turn the VPN on</button></div>
+</form>
+</section>
+{{end}}
+{{end}}
+{{template "bottom" .}}

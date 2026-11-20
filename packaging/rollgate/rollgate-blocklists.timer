@@ -1,0 +1,13 @@
+# Update the DNS blocklists (ADR 0019) once a day at a random time, and soon
+# after boot. Persistent: a day missed while the router was off runs at boot.
+[Unit]
+Description=rollgate: update the DNS blocklists daily
+
+[Timer]
+OnBootSec=5min
+OnCalendar=daily
+RandomizedDelaySec=4h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

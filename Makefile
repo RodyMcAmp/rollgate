@@ -15,12 +15,12 @@ SHELL_SCRIPTS := image/build.sh tests/vm/boot-test.sh tests/vm/rollback-test.sh 
 	tests/vm/apply-test.sh tests/vm/ipv6-test.sh tests/vm/trial-test.sh \
 	tests/vm/update-test.sh tests/netns/run.sh release/publish.sh release/dry-run.sh \
 	release/bump.sh packaging/build.sh image/vmware.sh tests/vm/vmware-test.sh tests/vm/api-test.sh tests/vm/web-test.sh \
-	tests/vm/clock-test.sh \
+	tests/vm/clock-test.sh tests/vm/blocklist-test.sh tests/vm/vpn-test.sh \
 	image/rootfs/usr/local/sbin/rollgate-snapshot-rollback \
 	image/rootfs/usr/local/lib/rollgate/boot-report
 
 .PHONY: check golden-update rollgate rollgate-release release-dry-run package test-netns \
-	image image-previous vmware test-vmware test-api test-web test-clock test-vm test-apply test-ipv6 test-trial test-rollback test-update clean
+	image image-previous vmware test-vmware test-api test-web test-blocklists test-vpn test-clock test-vm test-apply test-ipv6 test-trial test-rollback test-update clean
 
 ## L0 + L1: shell lint, Go format/vet/lint/tests, and the example config validates.
 ## Run before every commit.
@@ -118,6 +118,19 @@ test-api:
 ## page, HTTP redirects, unreachable from WAN, and a new password ends sessions.
 test-web:
 	$(SUDO) LOG_DIR=$(BUILD_DIR)/test-logs bash tests/vm/web-test.sh $(IMAGE)
+
+## L3: DNS blocklists (ADR 0019) in a VM: a list the host serves over HTTPS is
+## downloaded after apply, its names answer 0.0.0.0 and an allowed one doesn't, a
+## failed download keeps the last good list, and removing the setting stops it.
+test-blocklists:
+	$(SUDO) LOG_DIR=$(BUILD_DIR)/test-logs bash tests/vm/blocklist-test.sh $(IMAGE)
+
+## L3: the WireGuard VPN (ADR 0018) with a real client on the host: refused until
+## the router's key exists; reach = everything reaches the router, its DNS, the LAN
+## and the internet; reach = internet only the internet; an unknown key and a
+## removed [vpn] get nothing. Needs the wireguard module and wireguard-tools.
+test-vpn:
+	$(SUDO) LOG_DIR=$(BUILD_DIR)/test-logs bash tests/vm/vpn-test.sh $(IMAGE)
 
 ## L3: the clock synchronizes, and without DNS, with the clock 9 hours back, from
 ## Cloudflare's time service by IP address (ADR 0013, 0015). Needs internet.

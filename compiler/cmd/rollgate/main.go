@@ -11,12 +11,14 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/RodyMcAmp/rollgate/compiler/apply"
+	"github.com/RodyMcAmp/rollgate/compiler/blocklist"
 	"github.com/RodyMcAmp/rollgate/compiler/compile"
 	"github.com/RodyMcAmp/rollgate/compiler/config"
 	"github.com/RodyMcAmp/rollgate/compiler/health"
@@ -54,6 +56,18 @@ changing the router (as root; docs/architecture.md#safe-apply):
                            again (it and this one swap places); then reboot.
                            Booted from the "rollgate previous system" menu entry,
                            it keeps the running system instead
+
+  vpn [status]             the VPN (ADR 0018): its port, the router's public key,
+                           and when each device last connected
+  vpn key                  make the router's WireGuard key if there is none, and
+                           print its public key
+  vpn add [--home-only] NAME
+                           add a device: make its keys, add it to router.toml,
+                           apply, and print its configuration (shown only once).
+                           --home-only: only home traffic goes through the VPN
+  vpn remove NAME          remove a device from router.toml and apply
+  dns update               download dns.blocklists and give them to Unbound
+                           (ADR 0019; rollgate-blocklists.timer runs it daily)
 
 health (docs/architecture.md#health-checks):
   health [-wait SECONDS] [-boot]
@@ -177,6 +191,23 @@ func run(args []string, stdout, stderr io.Writer) int {
 			want = args[1]
 		}
 		return updateCmd(want, stdout, stderr)
+	case "vpn":
+		return vpnCmd(args[1:], stdout, stderr)
+	case "dns":
+		if len(args) != 2 || args[1] != "update" {
+			fmt.Fprint(stderr, usage)
+			return 2
+		}
+		if os.Geteuid() != 0 {
+			fmt.Fprintln(stderr, "rollgate dns update: must run as root")
+			return 1
+		}
+		s := system(stdout)
+		if err := blocklist.Update(blocklist.System{Root: s.Root, Run: s.Run, Get: blocklist.HTTPGet, Now: time.Now, Out: stdout}); err != nil {
+			fmt.Fprintf(stderr, "rollgate dns update: %v\n", err)
+			return 1
+		}
+		return 0
 	case "health":
 		return healthCmd(args[1:], stdout, stderr)
 	case "api":
@@ -340,7 +371,25 @@ func applyFile(s apply.System, path string, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	return apply.Apply(s, c, source, files)
+	prev, _ := health.RunningConfig(s.Root)
+	if err := apply.Apply(s, c, source, files); err != nil {
+		return err
+	}
+	// Blocklist settings changed (added, changed or removed): update now, in
+	// the background, instead of waiting for the daily timer (ADR 0019). With
+	// none set, the update tidies up and clears dnsmasq's cached answers.
+	var was config.DNS
+	if prev != nil {
+		was = prev.DNS
+	}
+	if !slices.Equal(was.Blocklists, c.DNS.Blocklists) || !slices.Equal(was.Allow, c.DNS.Allow) {
+		if out, err := s.Run.Run("systemctl", "start", "--no-block", "rollgate-blocklists.service"); err != nil {
+			fmt.Fprintf(s.Out, "note: couldn't start updating the DNS blocklists (%v: %s); the daily timer will.\n", err, strings.TrimSpace(string(out)))
+		} else if len(c.DNS.Blocklists) > 0 {
+			fmt.Fprintln(s.Out, "Downloading the DNS blocklists in the background; rollgate status shows when they're in use.")
+		}
+	}
+	return nil
 }
 
 // diffCmd follows diff(1)'s exit codes: 0 no changes, 1 changes, 2 trouble.

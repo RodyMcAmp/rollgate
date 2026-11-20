@@ -19,6 +19,15 @@ type firewall struct {
 	DefaultPolicy bool // no [[firewall.policy]] given
 	Policies      []rule
 	PortForwards  []forward
+	VPN           *vpnRules // [vpn] (ADR 0018)
+}
+
+// vpnRules are the VPN's firewall rules: its port on WAN, DNS from it, and
+// what it may reach, ahead of [[firewall.policy]].
+type vpnRules struct {
+	Device   string
+	Port     int
+	Internet bool // reach = "internet": to WAN only; otherwise everywhere
 }
 
 type zone struct {
@@ -63,6 +72,10 @@ func buildFirewall(c *config.Config, header string) (firewall, error) {
 	}
 	for _, v := range c.VLANs {
 		addDevice(v.Name, v.Zone, v.Name)
+	}
+	if c.VPN != nil {
+		addDevice(config.VPNZone, config.VPNZone, config.VPNZone)
+		fw.VPN = &vpnRules{Device: config.VPNZone, Port: c.VPN.Port, Internet: c.VPN.Reach == "internet"}
 	}
 	var local []string
 	for i, z := range fw.Zones {

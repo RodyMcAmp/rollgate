@@ -21,11 +21,18 @@ interface={{.Device}}
 # dnsmasq would listen everywhere, WAN included.)
 interface=lo
 {{- end}}
+{{- range .DNSOnly}}
+# The VPN (ADR 0018): DNS only.
+interface={{.}}
+{{- end}}
 bind-dynamic
 # The router's own name resolves to its address on the asking client's network.
 localise-queries
 {{- range .Services}}
 interface-name={{$.Hostname}}.{{$.Domain}},{{.Device}}/4
+{{- end}}
+{{- range .DNSOnly}}
+interface-name={{$.Hostname}}.{{$.Domain}},{{.}}/4
 {{- end}}
 
 # DHCP

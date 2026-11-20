@@ -24,6 +24,12 @@ match_device = "eth1"
 ipv4 = "192.168.10.1/24"
 `
 
+// WireGuard public keys for the VPN cases.
+const (
+	testKey1 = "HIgo9xNzJMWLKASShiTqIybxZ0U3wGLiUeJ1PKf8ykw="
+	testKey2 = "xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg="
+)
+
 func TestExampleConfig(t *testing.T) {
 	c, err := Load("../../examples/router.toml")
 	if err != nil {
@@ -132,7 +138,34 @@ func TestProblems(t *testing.T) {
 		{"plain forwarders", base + "[dns]\nmode = \"forward\"\nforwarders = [\"9.9.9.9\", \"1.1.1.1@53\"]\n", nil},
 		{"TLS and plain mixed", base + "[dns]\nmode = \"forward\"\nforwarders = [\"9.9.9.9@853#dns.quad9.net\", \"2620:fe::fe\"]\n", []string{"E009 dns.forwarders"}},
 		{"bad forwarder", base + "[dns]\nmode = \"forward\"\nforwarders = [\"dns.quad9.net\"]\n", []string{"E009 dns.forwarders"}},
-		{"blocklists not yet", base + "[dns]\nblocklists = [\"https://example.com/list\"]\n", []string{"E009 dns.blocklists"}},
+		{"blocklists", base + "[dns]\nblocklists = [\"recommended\", \"https://example.com/list.txt\"]\nallow = [\"Shop.Example.com.\"]\n", nil},
+		{"blocklist over http", base + "[dns]\nblocklists = [\"http://example.com/list\"]\n", []string{"E009 dns.blocklists[0]"}},
+		{"unknown built-in blocklist", base + "[dns]\nblocklists = [\"strict\"]\n", []string{"E009 dns.blocklists[0]"}},
+		{"blocklist twice", base + "[dns]\nblocklists = [\"recommended\", \"recommended\"]\n", []string{"E011 dns.blocklists[1]"}},
+		{"bad allow name", base + "[dns]\nblocklists = [\"recommended\"]\nallow = [\"not a name\"]\n", []string{"E009 dns.allow[0]"}},
+		{"allow without blocklists", base + "[dns]\nallow = [\"example.com\"]\n", []string{"E009 dns.allow"}},
+
+		{"VPN with defaults", base + "[vpn]\n", nil},
+		{"VPN with devices", base + "[management]\nallowed_zones = [\"lan\", \"vpn\"]\n\n[vpn]\nreach = \"internet\"\nendpoint = \"home.example.net\"\n" +
+			"\n[[vpn.peer]]\nname = \"phone\"\npublic_key = \"" + testKey1 + "\"\nipv4 = \"10.66.0.2\"\n" +
+			"\n[[vpn.peer]]\nname = \"laptop\"\npublic_key = \"" + testKey2 + "\"\nipv4 = \"10.66.0.3\"\n" +
+			"\n[[firewall.policy]]\nfrom = \"vpn\"\nto = \"lan\"\naction = \"accept\"\n", nil},
+		{"VPN overlaps lan", base + "[vpn]\naddress = \"192.168.10.200/24\"\n", []string{"E002 vpn ipv4"}},
+		{"VPN reach", base + "[vpn]\nreach = \"lan\"\n", []string{"E009 vpn.reach"}},
+		{"VPN port", base + "[vpn]\nport = 0\n", []string{"E009 vpn.port"}},
+		{"VPN network address", base + "[vpn]\naddress = \"10.66.0.0/24\"\n", []string{"E009 vpn.address"}},
+		{"VPN port forwarded", base + "[vpn]\n\n[[firewall.port_forward]]\nname = \"game\"\nprotocol = \"udp\"\nwan_port = \"51800-51830\"\nto = \"192.168.10.5:51800\"\n",
+			[]string{"E011 vpn.port"}},
+		{"VPN bad key", base + "[vpn]\n[[vpn.peer]]\nname = \"phone\"\npublic_key = \"nope\"\nipv4 = \"10.66.0.2\"\n", []string{`E009 vpn.peer "phone" public_key`}},
+		{"VPN device outside", base + "[vpn]\n[[vpn.peer]]\nname = \"phone\"\npublic_key = \"" + testKey1 + "\"\nipv4 = \"10.67.0.2\"\n", []string{`E009 vpn.peer "phone" ipv4`}},
+		{"VPN device is the router", base + "[vpn]\n[[vpn.peer]]\nname = \"phone\"\npublic_key = \"" + testKey1 + "\"\nipv4 = \"10.66.0.1\"\n", []string{`E009 vpn.peer "phone" ipv4`}},
+		{"VPN same device twice", base + "[vpn]\n[[vpn.peer]]\nname = \"phone\"\npublic_key = \"" + testKey1 + "\"\nipv4 = \"10.66.0.2\"\n" +
+			"[[vpn.peer]]\nname = \"phone\"\npublic_key = \"" + testKey1 + "\"\nipv4 = \"10.66.0.2\"\n",
+			[]string{`E011 vpn.peer "phone" name`, `E011 vpn.peer "phone" public_key`, `E011 vpn.peer "phone" ipv4`}},
+		{"managed only over the VPN", base + "[management]\nallowed_zones = [\"vpn\"]\n\n[vpn]\n", []string{"E004 management.allowed_zones"}},
+		{"zone vpn without a VPN", base + "[management]\nallowed_zones = [\"lan\", \"vpn\"]\n", []string{"E003 management.allowed_zones"}},
+		{"an interface in the VPN's zone", base + "[vpn]\n\n[[interface]]\nname = \"dmz\"\nmatch_device = \"eth2\"\nzone = \"vpn\"\nipv4 = \"10.1.0.1/24\"\n",
+			[]string{`E011 interface "dmz" zone`}},
 
 		{"same MAC twice", base + "\n[[interface]]\nname = \"a\"\nmatch_mac = \"00:00:5e:00:53:01\"\nipv4 = \"10.0.0.1/24\"\n" +
 			"\n[[interface]]\nname = \"b\"\nmatch_mac = \"00:00:5E:00:53:01\"\nipv4 = \"10.0.1.1/24\"\n", []string{`E011 interface "b" match_mac`}},

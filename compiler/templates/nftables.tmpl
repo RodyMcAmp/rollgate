@@ -35,6 +35,14 @@ table inet rollgate {
 		iifname {{set .Services}} udp dport 67 accept
 		iifname {{set .Services}} meta l4proto { tcp, udp } th dport 53 accept
 {{- end}}
+{{- with .VPN}}
+
+		# The WireGuard VPN (ADR 0018): its port, the only one open on WAN.
+		# WireGuard answers nothing to a packet without a known device's key.
+		iifname {{set $.WAN}} udp dport {{.Port}} accept
+		# DNS for connected devices.
+		iifname "{{.Device}}" meta l4proto { tcp, udp } th dport 53 accept
+{{- end}}
 
 		# SSH, and the web UI (HTTPS, and HTTP that only redirects to it), from
 		# management.allowed_zones only (ADR 0014).
@@ -50,6 +58,12 @@ table inet rollgate {
 
 		# Port forwards: traffic from WAN that the prerouting chain sent to a device.
 		iifname {{set .WAN}} ct status dnat accept
+{{- end}}
+{{- with .VPN}}
+
+		# vpn.reach = "{{if .Internet}}internet{{else}}everything{{end}}": what connected devices may reach, before
+		# [[firewall.policy]]. It only accepts, so rules below can allow more.
+		iifname "{{.Device}}"{{if .Internet}} oifname {{set $.WAN}}{{end}} accept
 {{- end}}
 {{- if .DefaultPolicy}}
 

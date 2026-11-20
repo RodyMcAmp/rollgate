@@ -59,8 +59,15 @@
       "additionalProperties": false,
       "description": "How the router resolves names.",
       "properties": {
+        "allow": {
+          "description": "Names never blocked, with every name under them.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "blocklists": {
-          "description": "Planned (M6); must be empty for now.",
+          "description": "Names to block on every network: \"recommended\" or https:// URLs of lists (ADR 0019).",
           "items": {
             "type": "string"
           },
@@ -327,6 +334,60 @@
         "type": "object"
       },
       "type": "array"
+    },
+    "vpn": {
+      "additionalProperties": false,
+      "description": "A WireGuard VPN for reaching home from outside (ADR 0018). Present means on.",
+      "properties": {
+        "address": {
+          "description": "The router's address inside the VPN (default \"10.66.0.1/24\").",
+          "type": "string"
+        },
+        "endpoint": {
+          "description": "A name that always points at your home, for devices' configurations.",
+          "type": "string"
+        },
+        "peer": {
+          "description": "Devices allowed to connect.",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "ipv4": {
+                "description": "The device's address inside the VPN.",
+                "type": "string"
+              },
+              "name": {
+                "description": "The device's name.",
+                "type": "string"
+              },
+              "public_key": {
+                "description": "The device's WireGuard public key.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "public_key",
+              "ipv4"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "port": {
+          "description": "UDP port on WAN (default 51820).",
+          "type": "integer"
+        },
+        "reach": {
+          "description": "What devices reach: \"everything\" (default) or \"internet\".",
+          "enum": [
+            "everything",
+            "internet"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
     }
   },
   "required": [

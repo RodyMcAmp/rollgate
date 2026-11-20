@@ -35,7 +35,11 @@ type Backend struct {
 	// System is the kernel, uptime, memory, disk and interfaces.
 	System func() (*sysinfo.Info, error)
 	// Leases is the DHCP server's current leases.
-	Leases   func() ([]sysinfo.Lease, error)
+	Leases func() ([]sysinfo.Lease, error)
+	// VPN is the router's VPN key, WAN address and devices' last handshakes;
+	// VPNKey makes the router's VPN key if there is none (ADR 0018).
+	VPN      func() (*VPNState, error)
+	VPNKey   func(w io.Writer) error
 	Validate func(source []byte, w io.Writer) error
 	Diff     func(source []byte, w io.Writer) error
 	// Apply validates source, makes it router.toml and applies it with
@@ -64,6 +68,14 @@ type Response struct {
 	Pending *Pending        `json:"pending,omitempty"` // GET /v1/pending, if a change waits
 	System  *sysinfo.Info   `json:"system,omitempty"`  // GET /v1/system
 	Leases  []sysinfo.Lease `json:"leases,omitempty"`  // GET /v1/leases
+	VPN     *VPNState       `json:"vpn,omitempty"`     // GET /v1/vpn
+}
+
+// VPNState is what the web UI's VPN page needs from the router (ADR 0018).
+type VPNState struct {
+	PublicKey  string               `json:"public_key,omitempty"`  // the router's; "" until it has a key
+	WANAddress string               `json:"wan_address,omitempty"` // the router's IPv4 address on WAN now
+	LastSeen   map[string]time.Time `json:"last_seen,omitempty"`   // devices' last handshakes, by public key
 }
 
 // Pending is a change waiting for confirmation (ADR 0010).
@@ -133,6 +145,15 @@ func Handler(b Backend) http.Handler {
 		}
 		reply(w, Response{OK: true, Leases: leases})
 	})
+	mux.HandleFunc("GET /v1/vpn", func(w http.ResponseWriter, r *http.Request) {
+		st, err := b.VPN()
+		if err != nil {
+			reply(w, Response{Error: err.Error()})
+			return
+		}
+		reply(w, Response{OK: true, VPN: st})
+	})
+	mux.Handle("POST /v1/vpn/key", change(func(_ Request, w io.Writer) error { return b.VPNKey(w) }))
 	mux.Handle("POST /v1/validate", change(func(req Request, w io.Writer) error { return b.Validate([]byte(req.Config), w) }))
 	mux.Handle("POST /v1/diff", change(func(req Request, w io.Writer) error { return b.Diff([]byte(req.Config), w) }))
 	mux.Handle("POST /v1/apply", change(func(req Request, w io.Writer) error {
