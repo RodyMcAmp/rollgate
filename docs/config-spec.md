@@ -89,6 +89,23 @@ Blocklists: the router downloads each list over HTTPS once a day at a random tim
 Local names: devices that get an address from the router's DHCP are reachable as `<their hostname>.<domain>` (for example `nas.home.arpa`), and the router itself as `<hostname>.<domain>` (`gateway.home.arpa`), from every zone with a `[dhcp.<name>]` section.
 Names in `<domain>` are never sent to the internet.
 
+## `[vpn]`
+
+A WireGuard VPN for reaching home from outside (ADR 0018): a phone or laptop away from home connects to the router, and uses the home networks, or the home internet connection, as if it were at home. Having a `[vpn]` section turns it on.
+
+| Key | Type | Default | Notes |
+|---|---|---|---|
+| `port` | integer | `51820` | the UDP port the router listens on, on WAN. The only port the VPN opens. |
+| `address` | string | `"10.66.0.1/24"` | the router's address inside the VPN, with its size. Mustn't overlap another network. |
+| `reach` | string | `"everything"` | `"everything"`: connected devices reach the internet and every home network. `"internet"`: only the internet, through home. |
+| `endpoint` | string | — | a name (or address) that always points at your home, put into devices' configurations. Without it, the router's current public address is used. |
+| `[[vpn.peer]]` | array of tables | | the devices allowed to connect: `name`, `public_key` (the device's WireGuard public key), `ipv4` (its fixed address inside the VPN). |
+
+- The VPN is a zone named `vpn`: `firewall.policy` rules can name it, and `management.allowed_zones` must list `"vpn"` for the router to be managed over the VPN. It never counts as the network that keeps the router manageable (E004): a network at home must.
+- The router's private key is a secret, `/etc/rollgate/secrets/vpn.key`; `rollgate vpn key` makes it and prints the router's public key. `rollgate apply` refuses a `[vpn]` section until it exists.
+- Devices use the router's DNS (`address`), so local names work over the VPN.
+- `reach` is a forward rule for the `vpn` zone that comes before your `[[firewall.policy]]` rules. It only allows, so your rules can still let the `vpn` zone reach more.
+
 ## `[firewall]`
 
 Inbound traffic from `wan` is always dropped, both to the router and through it. The only ways in are replies to connections started from inside, port forwards, rate-limited ICMP, and the IPv6 control messages an internet connection needs (see below). **This default cannot be changed** (AGENTS.md hard rule 5).

@@ -47,6 +47,16 @@ mode = "recursive"
 # blocklists = ["recommended"]   # block ads and trackers on every network (ADR 0019)
 # allow = ["example-shop.com"]   # names a list blocks by mistake
 
+# Reach home from outside with WireGuard (ADR 0018): run "rollgate vpn key"
+# first, then add a section like this, with one [[vpn.peer]] per device.
+# [vpn]
+# reach = "everything"   # or "internet": the home connection only, not the home networks
+#
+# [[vpn.peer]]
+# name = "phone"
+# public_key = "xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg="
+# ipv4 = "10.66.0.2"
+
 [[firewall.policy]]
 from = "lan"
 to = "*"

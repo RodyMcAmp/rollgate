@@ -1,0 +1,18 @@
+{{.Header}}
+# The WireGuard VPN (ADR 0018): zone "vpn". The private key is a secret that
+# rollgate vpn key made; systemd-networkd reads it from the file.
+
+[NetDev]
+Name={{.Device}}
+Kind=wireguard
+
+[WireGuard]
+PrivateKeyFile=/{{.KeyFile}}
+ListenPort={{.Port}}
+{{- range .Peers}}
+
+[WireGuardPeer]
+# {{.Name}}
+PublicKey={{.PublicKey}}
+AllowedIPs={{.IPv4}}/32
+{{- end}}

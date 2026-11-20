@@ -14,6 +14,7 @@ type dnsmasq struct {
 	Hostname string
 	Domain   string
 	Services []dhcpService
+	DNSOnly  []string // devices that get DNS but no DHCP: the VPN's
 }
 
 // dhcpService is one interface or VLAN with a [dhcp.<name>] section.
@@ -52,6 +53,9 @@ const (
 
 func buildDNSMasq(c *config.Config, header string) dnsmasq {
 	d := dnsmasq{Header: header, Hostname: c.System.Hostname, Domain: c.System.Domain}
+	if c.VPN != nil {
+		d.DNSOnly = []string{config.VPNZone}
+	}
 	add := func(kind, name, device string, addr netip.Prefix) {
 		dh, ok := c.DHCP[name]
 		if !ok {

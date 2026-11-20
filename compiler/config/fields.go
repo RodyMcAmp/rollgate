@@ -170,6 +170,7 @@ func validateFields(c *Config, md toml.MetaData, ps *problems) {
 	for i := range c.Firewall.PortForward {
 		validatePortForward(ps, i, &c.Firewall.PortForward[i], forwards)
 	}
+	validateVPN(ps, c)
 
 	if c.IPv6.ULAPrefix != "" {
 		p, err := netip.ParsePrefix(c.IPv6.ULAPrefix)

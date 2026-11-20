@@ -18,6 +18,7 @@ type Config struct {
 	DNS           DNS             `toml:"dns"`
 	Firewall      Firewall        `toml:"firewall"`
 	IPv6          IPv6            `toml:"ipv6"`
+	VPN           *VPN            `toml:"vpn"` // nil: no VPN (ADR 0018)
 }
 
 type System struct {
@@ -89,6 +90,30 @@ type DNS struct {
 	Blocklists []string `toml:"blocklists"` // built-in names or https:// URLs (ADR 0019)
 	Allow      []string `toml:"allow"`      // names never blocked
 }
+
+// VPN is the WireGuard VPN for reaching home from outside (ADR 0018). Its
+// zone and device are both named VPNZone.
+type VPN struct {
+	Port     int    `toml:"port"`
+	Address  string `toml:"address"`  // the router's address inside the VPN, with its size
+	Reach    string `toml:"reach"`    // "everything" or "internet"
+	Endpoint string `toml:"endpoint"` // a name for devices' configurations; optional
+	Peers    []Peer `toml:"peer"`
+
+	Addr netip.Prefix `toml:"-"`
+}
+
+// Peer is a device allowed to connect to the VPN.
+type Peer struct {
+	Name      string `toml:"name"`
+	PublicKey string `toml:"public_key"`
+	IPv4      string `toml:"ipv4"`
+
+	Addr netip.Addr `toml:"-"`
+}
+
+// VPNZone is the VPN's zone and interface name.
+const VPNZone = "vpn"
 
 // BuiltinBlocklists are the names dns.blocklists accepts besides URLs. A
 // change here is a reviewed code change, not a setting (ADR 0019).

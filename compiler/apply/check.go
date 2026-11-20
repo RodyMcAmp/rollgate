@@ -10,6 +10,7 @@ import (
 
 	"github.com/RodyMcAmp/rollgate/compiler/compile"
 	"github.com/RodyMcAmp/rollgate/compiler/config"
+	"github.com/RodyMcAmp/rollgate/compiler/vpn"
 )
 
 // Runner runs a program and returns its combined output. Exec runs real
@@ -90,6 +91,13 @@ func Precheck(r Runner, root string, c *config.Config, files compile.Files) erro
 		if err != nil || !fi.Mode().IsRegular() || fi.Size() == 0 {
 			problems = append(problems, fmt.Errorf("SSH: management.ssh_authorized_keys names %q, but /%s/%s is missing or empty; "+
 				"applying would leave SSH without that key, so put the public key there first", name, SecretsDir, name))
+		}
+	}
+	// The VPN (ADR 0018): networkd can't bring it up without the router's key.
+	if c.VPN != nil {
+		path := filepath.Join(root, filepath.FromSlash(vpn.KeyFile))
+		if fi, err := os.Stat(path); err != nil || !fi.Mode().IsRegular() || fi.Size() == 0 {
+			problems = append(problems, fmt.Errorf("VPN: the router's VPN key /%s doesn't exist yet; run rollgate vpn key first", vpn.KeyFile))
 		}
 	}
 	return errors.Join(problems...)

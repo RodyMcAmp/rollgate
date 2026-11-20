@@ -46,6 +46,15 @@ dnsmasq answers LAN clients (DHCP and local names) and forwards everything else 
 - **When it runs:** `rollgate-blocklists.timer` (enabled by the package): 5 minutes after boot and once a day at a random time, and catching up at boot after a missed day. `rollgate apply` also starts it in the background when `dns.blocklists` or `dns.allow` changed, including when they were removed.
 - **What it did:** `/var/lib/rollgate/dns-blocklist.json`; `rollgate status` shows how many names are blocked, when, and how many lists failed.
 
+### The WireGuard VPN (`[vpn]`, ADR 0018)
+
+- **No daemon:** WireGuard is in the kernel. The compiler writes a `Kind=wireguard` `.netdev` (`20-rollgate-vpn.netdev`: the port and one `[WireGuardPeer]` per `[[vpn.peer]]`, each allowed only its own `/32`) and a `.network` with the router's VPN address; systemd-networkd sets it up. A changed peer list is a changed `.netdev`, so apply deletes and recreates the device (connected devices reconnect by themselves).
+- **The router's key:** `/etc/rollgate/secrets/vpn.key`, made by `rollgate vpn key` (Go's X25519), which prints the public half. networkd reads it (`PrivateKeyFile=`), so it is `root:systemd-network` 0640, and the secrets directory becomes `root:systemd-network` 0710: networkd can open that one file without listing the directory, and the other secrets stay 0600 root. `apply` refuses a `[vpn]` section while the key is missing (a precheck).
+- **The zone `vpn`:** the device is named `vpn` too. Its subnet joins the overlap checks (E002); `firewall.policy` and `management.allowed_zones` can name it; it never counts for E004, so the router stays manageable from home.
+- **Firewall:** UDP `port` from WAN to the router (the only opening the VPN makes), DNS from the `vpn` device, SSH and the web UI from it only if `allowed_zones` lists `vpn`, and in the forward chain, before `[[firewall.policy]]`, `iifname "vpn" accept` (`reach = "everything"`) or `iifname "vpn" oifname <WAN> accept` (`"internet"`). IPv4 from the VPN to the internet is masqueraded like every network's.
+- **DNS:** dnsmasq also listens on `vpn` (DNS only, no DHCP), and the router's name resolves to its VPN address there.
+- Adding devices from the CLI and the web UI, with their configuration shown once, comes in the next step *(planned)*.
+
 ### IPv6 (`system.ipv6 = "auto"`, ADR 0008)
 
 ```

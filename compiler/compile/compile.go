@@ -17,6 +17,7 @@ import (
 
 	"github.com/RodyMcAmp/rollgate/compiler/config"
 	"github.com/RodyMcAmp/rollgate/compiler/templates"
+	"github.com/RodyMcAmp/rollgate/compiler/vpn"
 )
 
 // Files maps a path relative to the filesystem root (e.g.
@@ -157,6 +158,23 @@ func Compile(c *config.Config, source []byte, sourceName string) (Files, error) 
 			return nil, err
 		}
 		if err := add("etc/systemd/network/30-rollgate-"+v.Name+".network", "network.tmpl", n); err != nil {
+			return nil, err
+		}
+	}
+
+	// The WireGuard VPN (ADR 0018): a device named like its zone, with the
+	// router's address inside the VPN. IPv4 only for now.
+	if v := c.VPN; v != nil {
+		wg := struct {
+			Header, Device, KeyFile string
+			Port                    int
+			Peers                   []config.Peer
+		}{header, config.VPNZone, vpn.KeyFile, v.Port, v.Peers}
+		if err := add("etc/systemd/network/20-rollgate-"+config.VPNZone+".netdev", "wireguard.tmpl", wg); err != nil {
+			return nil, err
+		}
+		n := network{Header: header, Kind: "VPN", Name: config.VPNZone, Zone: config.VPNZone, Device: config.VPNZone, Addr: v.Addr.String()}
+		if err := add("etc/systemd/network/30-rollgate-"+config.VPNZone+".network", "network.tmpl", n); err != nil {
 			return nil, err
 		}
 	}

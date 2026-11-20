@@ -41,6 +41,14 @@ func validateRules(c *Config, ps *problems) {
 		}
 	}
 
+	// The VPN (ADR 0018) is a segment too: its subnet mustn't overlap, its
+	// zone can be named, and its device name is taken.
+	if c.VPN != nil {
+		s := segment{"vpn", VPNZone, VPNZone, c.VPN.Addr}
+		segs = append(segs, s)
+		zones[VPNZone] = true
+	}
+
 	// E011: each port is matched once, and every segment gets its own device.
 	devices := map[string]string{}
 	macs := map[string]string{}
@@ -56,6 +64,9 @@ func validateRules(c *Config, ps *problems) {
 	}
 	for i, v := range c.VLANs {
 		claimDevice(ps, devices, itemPath("vlan", i, v.Name), v.Name)
+	}
+	if c.VPN != nil {
+		claimDevice(ps, devices, "vpn", VPNZone)
 	}
 
 	// E001: exactly one WAN, using DHCP until the spec has a gateway setting.
@@ -110,13 +121,25 @@ func validateRules(c *Config, ps *problems) {
 	}
 	reachable := false
 	for _, s := range segs {
-		if s.addr.IsValid() && slices.Contains(c.Management.AllowedZones, s.zone) {
+		// The VPN doesn't count: if it ever failed, nothing at home could reach
+		// the router.
+		if s.addr.IsValid() && s.zone != VPNZone && slices.Contains(c.Management.AllowedZones, s.zone) {
 			reachable = true
 		}
 	}
-	if namesOK && !reachable {
+	switch {
+	case namesOK && !reachable && slices.Equal(c.Management.AllowedZones, []string{VPNZone}):
+		ps.add(CodeManagement, "management.allowed_zones", "the router must stay manageable from a network at home too, not only over the VPN; add one, such as \"lan\"")
+	case namesOK && !reachable:
 		ps.add(CodeManagement, "management.allowed_zones", "none of the zones %q has an interface with a static address, so you couldn't reach the router to manage it",
 			c.Management.AllowedZones)
+	}
+	if c.VPN != nil {
+		for _, s := range segs {
+			if s.zone == VPNZone && s.path != "vpn" {
+				ps.add(CodeDuplicate, s.path+" zone", "the zone %q belongs to the VPN ([vpn]); choose another zone", VPNZone)
+			}
+		}
 	}
 
 	// E005: DHCP.
