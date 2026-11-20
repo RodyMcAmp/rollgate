@@ -22,6 +22,7 @@ import (
 	"github.com/RodyMcAmp/rollgate/compiler/health"
 	"github.com/RodyMcAmp/rollgate/compiler/sysinfo"
 	"github.com/RodyMcAmp/rollgate/compiler/update"
+	"github.com/RodyMcAmp/rollgate/compiler/vpn"
 	"github.com/RodyMcAmp/rollgate/compiler/web"
 )
 
@@ -110,6 +111,33 @@ func apiBackend() api.Backend {
 			return &api.Pending{Generation: p.Generation, Deadline: p.Deadline}, nil
 		},
 		Leases: func() ([]sysinfo.Lease, error) { return sysinfo.ReadLeases(sysinfo.LeaseFile) },
+		VPN: func() (*api.VPNState, error) {
+			st := &api.VPNState{}
+			if pub, ok, err := vpn.RouterPublicKey("/"); err == nil && ok {
+				st.PublicKey = pub
+			}
+			if c, err := health.RunningConfig("/"); err == nil && c != nil {
+				if a := wanAddress(c); a.IsValid() {
+					st.WANAddress = a.String()
+				}
+				if c.VPN != nil {
+					out, _ := sys(io.Discard, "").Run.Run("wg", "show", config.VPNZone, "latest-handshakes")
+					st.LastSeen = vpn.Handshakes(string(out))
+				}
+			}
+			return st, nil
+		},
+		VPNKey: func(w io.Writer) error {
+			pub, created, err := vpn.EnsureKey("/")
+			if err != nil {
+				return err
+			}
+			if created {
+				fmt.Fprintf(w, "Made the router's VPN key (/%s).\n", vpn.KeyFile)
+			}
+			fmt.Fprintf(w, "The router's VPN public key: %s\n", pub)
+			return nil
+		},
 		System: func() (*sysinfo.Info, error) {
 			info := sysinfo.Read("/", interfaceAddrs)
 			info.Release, _ = update.RunningRelease("/")

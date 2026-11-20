@@ -78,6 +78,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /confirm", s.confirmPage)
 	mux.HandleFunc("POST /confirm", s.confirm)
 	mux.HandleFunc("POST /revert", s.revert)
+	mux.HandleFunc("GET /vpn", s.vpnPage)
+	mux.HandleFunc("POST /vpn", s.vpnForm)
+	mux.HandleFunc("POST /vpn/download", s.vpnDownload)
 	mux.HandleFunc("GET /networks", s.networksPage)
 	mux.HandleFunc("POST /networks", s.networks)
 	mux.HandleFunc("GET /devices", s.devicesPage)
@@ -277,6 +280,9 @@ type page struct {
 	Parents     []string // networks: ports a VLAN can go on
 	HasPolicies bool     // networks: router.toml has firewall rules
 	NetForm     netForm  // networks: the add form
+
+	VPN    *vpnView // vpn
+	VPNNew *vpnNew  // vpn: a new device's configuration, shown once on the review
 }
 
 // newPage starts a page for a logged-in session, with any pending change.

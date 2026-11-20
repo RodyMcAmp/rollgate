@@ -16,11 +16,13 @@
 #   4. rollgate vpn add makes a device whose printed configuration connects, and
 #      whose private key isn't in router.toml; rollgate vpn shows it connected;
 #      rollgate vpn remove disconnects it.
-#   5. Without [vpn]: the client gets nothing, and the firewall has no VPN port.
+#   5. The web UI's VPN page adds a device; the configuration it shows once connects,
+#      and its private key isn't in router.toml.
+#   6. Without [vpn]: the client gets nothing, and the firewall has no VPN port.
 #
 # Usage:  sudo tests/vm/vpn-test.sh build/rollgate-<date>.img
 # Env:    LOG_DIR, OVMF_CODE, OVMF_VARS as in boot-test.sh; PORT (default 2290: SSH,
-#         then the VPN, the LAN server and the internet server on the next three)
+#         then the VPN, the LAN server, the internet server and HTTPS on the next four)
 
 # Commands run inside the VM are single-quoted on purpose, so they expand there.
 # shellcheck disable=SC2016
@@ -33,11 +35,12 @@ log_dir=$(realpath -m "${LOG_DIR:-$(dirname "$image")/test-logs}")
 ovmf_code=${OVMF_CODE:-/usr/share/edk2/x64/OVMF_CODE.4m.fd}
 ovmf_vars=${OVMF_VARS:-/usr/share/edk2/x64/OVMF_VARS.4m.fd}
 port=${PORT:-2290}
-ssh_port=$port wg_port=$((port + 1)) lan_port=$((port + 2)) net_port=$((port + 3))
+ssh_port=$port wg_port=$((port + 1)) lan_port=$((port + 2)) net_port=$((port + 3)) https_port=$((port + 4))
 # Must match root_start_sector in image/build.sh (ESP at 2048, 512 MiB long).
 root_offset=$(((2048 + 512 * 2048) * 512))
 serial="$log_dir/vpn.serial.log"
 ns=rgvpn$$ stranger=rgvpnx$$
+password="correct horse battery staple"
 
 die() { echo "vpn-test: FAIL: $*" >&2; exit 1; }
 log() { echo "==> $*"; }
@@ -61,6 +64,7 @@ cleanup() {
   ip netns del "$ns" 2>/dev/null || true
   ip netns del "$stranger" 2>/dev/null || true
   ip netns del "rgvpnl$$" 2>/dev/null || true
+  ip netns del "rgvpnt$$" 2>/dev/null || true
   [[ -n $qemu_pid ]] && kill "$qemu_pid" 2>/dev/null && wait "$qemu_pid" 2>/dev/null
   mountpoint -q "$work/root" && umount "$work/root"
   rm -rf "$work"
@@ -104,7 +108,7 @@ qemu-system-x86_64 -machine q35 -m 1024 -smp 2 "${accel[@]}" \
   -drive if=pflash,format=raw,readonly=on,file="$ovmf_code" \
   -drive if=pflash,format=raw,file="$work/vars.fd" \
   -drive file="$work/disk.img",format=raw,if=virtio \
-  -nic user,model=virtio-net-pci,mac=52:54:00:00:00:01,hostfwd=tcp:127.0.0.1:"$ssh_port"-:22 \
+  -nic user,model=virtio-net-pci,mac=52:54:00:00:00:01,hostfwd=tcp:127.0.0.1:"$ssh_port"-:22,hostfwd=tcp:127.0.0.1:"$https_port"-:443 \
   -nic user,model=virtio-net-pci,mac=52:54:00:00:00:02,net=10.0.3.0/24,hostfwd=udp:127.0.0.1:"$wg_port"-10.0.3.15:51820 \
   -display none -monitor none -serial file:"$serial" &
 qemu_pid=$!
@@ -225,7 +229,41 @@ if ip netns exec "$laptop" ping -c 2 -W 2 10.66.0.1 >/dev/null 2>&1; then ip net
 ip netns del "$laptop"
 log "  added (10.66.0.3, with a warning about the private WAN address), connected, shown by rollgate vpn, removed"
 
-log "5. without [vpn]: nothing, and no port open"
+log "5. the web UI's VPN page: add a device, connect with the configuration it shows"
+vm "echo '$password' | rollgate web-password --stdin" >/dev/null || die "rollgate web-password failed"
+web() { local path=$1; shift; curl -sk -m 30 -D - -b "$work/cookies" -c "$work/cookies" "$@" "https://127.0.0.1:$https_port$path"; }
+field() { sed -n "s/.*name=\"$1\" value=\"\([^\"]*\)\".*/\1/p" <<<"$out" | head -n 1; }
+out=$(web /login --data-urlencode "password=$password")
+out=$(web /vpn)
+[[ $out == *"The VPN is on"* && $out == *"test-client"* ]] || die "the VPN page: $out"
+csrf=$(field csrf)
+out=$(web /vpn --data-urlencode "csrf=$csrf" -d action=add -d name=tablet -d traffic=everything)
+[[ $out == *"shown only now"* ]] || die "the VPN page's review shows no configuration: $out"
+# html/template writes + as &#43;.
+page=${out//&#43;/+}
+sed -n 's/^PrivateKey = \(.*\)$/\1/p' <<<"$page" | head -n 1 > "$work/tablet.key"
+tablet_addr=$(sed -n 's/^Address = \(.*\)\/32$/\1/p' <<<"$page" | head -n 1)
+[[ -s $work/tablet.key && -n $tablet_addr ]] || die "no configuration to use on the review page: $out"
+c64=$(field config64 | sed 's/&#43;/+/g')
+out=$(web /settings --data-urlencode "csrf=$csrf" --data-urlencode "base=$(field base)" \
+  --data-urlencode "checked=$(field checked)" --data-urlencode "config64=$c64" -d action=apply)
+[[ $out == *" 303"* ]] || die "applying the new device: $out"
+out=$(web /confirm --data-urlencode "csrf=$csrf")
+[[ $out == *"The new settings are kept"* ]] || die "keeping the new device: $out"
+vm "grep -q '$(cat "$work/tablet.key")' /etc/rollgate/router.toml" && die "the device's private key is in router.toml"
+tablet=rgvpnt$$
+client "$tablet" "$work/tablet.key" "$tablet_addr"
+start=$SECONDS
+until ip netns exec "$tablet" ping -c 1 -W 2 10.66.0.1 >/dev/null 2>&1; do
+  ((SECONDS - start < 60)) || { ip netns del "$tablet"; die "the device added on the web page can't reach the router"; }
+  sleep 1
+done
+out=$(web /vpn)
+[[ $out == *"tablet"* ]] || { ip netns del "$tablet"; die "the VPN page doesn't list the tablet: $out"; }
+ip netns del "$tablet"
+log "  added on the page ($tablet_addr), configuration shown once, kept, and the device connects"
+
+log "6. without [vpn]: nothing, and no port open"
 apply_config off
 if in_ns ping -c 2 -W 2 10.66.0.1 >/dev/null 2>&1; then die "the client still reaches the router without [vpn]"; fi
 grep -q "51820" <<<"$(vm 'nft list ruleset')" && die "the firewall still opens the VPN port"

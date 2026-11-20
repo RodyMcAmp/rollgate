@@ -22,6 +22,7 @@ import (
 
 	"github.com/RodyMcAmp/rollgate/compiler/api"
 	"github.com/RodyMcAmp/rollgate/compiler/apply"
+	"github.com/RodyMcAmp/rollgate/compiler/config"
 	"github.com/RodyMcAmp/rollgate/compiler/health"
 	"github.com/RodyMcAmp/rollgate/compiler/web"
 )
@@ -245,6 +246,9 @@ func certNames(root string) ([]string, []netip.Addr) {
 	}
 	for _, v := range c.VLANs {
 		add(v.Zone, v.Name, v.Addr)
+	}
+	if c.VPN != nil { // when the VPN may manage the router (ADR 0018)
+		add(config.VPNZone, config.VPNZone, c.VPN.Addr)
 	}
 	return names, ips
 }

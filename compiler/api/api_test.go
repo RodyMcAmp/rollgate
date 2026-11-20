@@ -34,6 +34,10 @@ func (f *fake) backend() Backend {
 		},
 		Config:  func() ([]byte, error) { return []byte("schema_version = 1\n"), nil },
 		Pending: func() (*Pending, error) { return f.pending, nil },
+		VPN: func() (*VPNState, error) {
+			return &VPNState{PublicKey: "routerkey=", WANAddress: "203.0.113.5"}, nil
+		},
+		VPNKey: func(w io.Writer) error { note("vpn key"); return nil },
 		Leases: func() ([]sysinfo.Lease, error) {
 			return []sysinfo.Lease{{MAC: "52:54:00:aa:bb:01", IPv4: "192.168.10.123", Hostname: "phone"}}, nil
 		},
@@ -114,6 +118,12 @@ func TestRequests(t *testing.T) {
 	if code, r := call(t, c, "GET", "/v1/leases", ""); code != 200 || len(r.Leases) != 1 || r.Leases[0].Hostname != "phone" {
 		t.Errorf("leases: %d %+v", code, r)
 	}
+	if code, r := call(t, c, "GET", "/v1/vpn", ""); code != 200 || r.VPN == nil || r.VPN.PublicKey != "routerkey=" || r.VPN.WANAddress != "203.0.113.5" {
+		t.Errorf("vpn: %d %+v", code, r)
+	}
+	if code, _ := call(t, c, "POST", "/v1/vpn/key", ""); code != 200 {
+		t.Errorf("vpn key: %d", code)
+	}
 	if code, r := call(t, c, "GET", "/v1/pending", ""); code != 200 || !r.OK || r.Pending != nil {
 		t.Errorf("pending, with nothing pending: %d %+v", code, r)
 	}
@@ -133,6 +143,7 @@ func TestRequests(t *testing.T) {
 	call(t, c, "POST", "/v1/revert", "")
 
 	want := []string{
+		"vpn key",
 		`apply "x = 1" from "web 192.168.50.1 51234"`,
 		`confirm from "web 192.168.50.1 51240"`,
 		`validate "y = 2"`,
