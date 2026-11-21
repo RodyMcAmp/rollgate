@@ -1,0 +1,12 @@
+#!/bin/bash
+# mkinitcpio install hook for the USB installer (ADR 0021): see hooks/rollgate-overlay.
+
+build() {
+    add_module squashfs
+    add_module overlay
+    add_runscript
+}
+
+help() {
+    echo "rollgate installer: a writable layer in memory over the read-only system"
+}
