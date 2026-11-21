@@ -5,6 +5,7 @@ SHELL := /bin/bash
 BUILD_DIR ?= build
 SNAPSHOT_DATE := $(shell tr -d '[:space:]' < image/snapshot-date)
 IMAGE := $(BUILD_DIR)/rollgate-$(SNAPSHOT_DATE).img
+INSTALLER := $(BUILD_DIR)/rollgate-installer-$(SNAPSHOT_DATE).img
 # The L4 update test's "previous release": a week before the candidate, until the
 # release train publishes real releases (M4 step 7).
 PREVIOUS_DATE := $(shell date -u -d "$(SNAPSHOT_DATE) -7 days" +%F)
@@ -16,11 +17,12 @@ SHELL_SCRIPTS := image/build.sh tests/vm/boot-test.sh tests/vm/rollback-test.sh 
 	tests/vm/update-test.sh tests/netns/run.sh release/publish.sh release/dry-run.sh \
 	release/bump.sh packaging/build.sh image/vmware.sh tests/vm/vmware-test.sh tests/vm/api-test.sh tests/vm/web-test.sh \
 	tests/vm/clock-test.sh tests/vm/blocklist-test.sh tests/vm/vpn-test.sh \
+	image/installer.sh tests/vm/install-test.sh \
 	image/rootfs/usr/local/sbin/rollgate-snapshot-rollback \
 	image/rootfs/usr/local/lib/rollgate/boot-report
 
 .PHONY: check golden-update rollgate rollgate-release release-dry-run package test-netns \
-	image image-previous vmware test-vmware test-api test-web test-blocklists test-vpn test-firstboot test-clock test-vm test-apply test-ipv6 test-trial test-rollback test-update clean
+	image installer image-previous vmware test-vmware test-api test-web test-blocklists test-vpn test-firstboot test-install test-clock test-vm test-apply test-ipv6 test-trial test-rollback test-update clean
 
 ## L0 + L1: shell lint, Go format/vet/lint/tests, and the example config validates.
 ## Run before every commit.
@@ -65,6 +67,10 @@ test-netns: rollgate
 ## Build the disk image at the date in image/snapshot-date.
 image: rollgate
 	$(SUDO) BUILD_DIR=$(BUILD_DIR) ROLLGATE=$(abspath $(BUILD_DIR)/rollgate) bash image/build.sh
+
+## Build the USB installer image (ADR 0021) from the router image: run make image first.
+installer: rollgate
+	$(SUDO) BUILD_DIR=$(BUILD_DIR) ROLLGATE=$(abspath $(BUILD_DIR)/rollgate) bash image/installer.sh
 
 ## Turn the image into a VMware Workstation VM (docs/vmware.md). Needs SSH_KEY, your
 ## SSH public key file; VMWARE_DIR is where the VM's folder goes.
@@ -138,6 +144,13 @@ test-vpn:
 ## health check is undone with the reason on the console.
 test-firstboot:
 	$(SUDO) LOG_DIR=$(BUILD_DIR)/test-logs bash tests/vm/firstboot-test.sh $(IMAGE)
+
+## L3: the USB installer (ADR 0021) puts rollgate on a blank disk: WAN is the port
+## that gets DHCP, LAN 192.168.10.1, nothing is written before erase is typed, the
+## reports are on the stick, and the installed router's first boot keeps the config
+## and lets the stick's SSH key in. Needs make installer.
+test-install:
+	$(SUDO) LOG_DIR=$(BUILD_DIR)/test-logs bash tests/vm/install-test.sh $(INSTALLER)
 
 ## L3: the clock synchronizes, and without DNS, with the clock 9 hours back, from
 ## Cloudflare's time service by IP address (ADR 0013, 0015). Needs internet.

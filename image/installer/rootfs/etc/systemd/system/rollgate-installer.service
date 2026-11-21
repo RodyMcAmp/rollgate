@@ -1,0 +1,16 @@
+# The USB installer (ADR 0021): rollgate install on the screen (tty1) and the serial
+# console at once. The login prompts there are masked (image/installer.sh), so
+# nothing else reads what is typed; tty2 (Alt+F2) still has one, for looking around.
+[Unit]
+Description=rollgate installer
+After=systemd-user-sessions.service local-fs.target
+
+[Service]
+Type=idle
+ExecStart=/usr/bin/rollgate install -console
+StandardInput=null
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -75,8 +75,13 @@ This exact sequence is tested automatically on every release (`make test-rollbac
 ## 4. Start over (last resort)
 
 1. Make sure you have a backup of `/etc/rollgate/` (`router.toml` and `secrets/`).
-2. Reinstall from the USB installer.
-3. Copy your `/etc/rollgate/` back, then run `rollgate apply` and `rollgate confirm`.
+2. Write the USB installer to a stick (docs/install.md, sections 1 and 2; you need another computer).
+   To keep your settings on the same computer, copy your backed-up `router.toml` into the stick's `rollgate` folder, with the SSH key files its `ssh_authorized_keys` names. Without it, the installer sets up the ports from scratch.
+3. Start the computer from the stick, check the disk it shows, and type `erase`. It erases the whole disk, snapshots included.
+4. Remove the stick and press Enter. The router sets itself up and asks for a new password.
+5. If you had other secrets (for example `vpn.key`), copy them back into `/etc/rollgate/secrets/`, then run `rollgate apply` and `rollgate confirm`.
+
+If the installer stops, read `install-log.txt` on the stick from another computer: it says why.
 
 ---
 

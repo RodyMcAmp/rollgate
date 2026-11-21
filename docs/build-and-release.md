@@ -34,7 +34,7 @@ Pinning the date gives you:
    Pull requests opened with the workflow's own token don't start CI (a GitHub rule). With the `ROLLGATE_BOT_TOKEN` secret, a fine-grained token with contents and pull-requests write access to this repository, they do; without it, close and reopen the pull request to start CI.
 2. **CI** runs L0–L4 ([testing.md](testing.md)). L4 installs the **previous** release, updates to the new date, and verifies a forced rollback.
 3. **Merge = release.** CI tags `release/2026.11.15` and publishes:
-   - the disk image and installer ISO, with checksums,
+   - the disk image, with its checksum, and the USB installer image (`rollgate-installer-<date>.img`, ADR 0021) *(planned: the installer isn't published yet)*,
    - `releases.json`, which lists released dates and their status (`current`, `previous`, `withdrawn`).
 4. **Withdrawing**: if a release causes problems in the field, mark it `withdrawn` in `releases.json`.
    `rollgate update` skips withdrawn dates.
@@ -128,6 +128,25 @@ Steps in `build.sh`:
 
 `make image` writes `build/rollgate-<date>.img` and a `.sha256` file. Set `BUILD_DIR` to build elsewhere.
 Developer setup (WSL2 or native Arch) is in [dev-setup.md](dev-setup.md).
+
+## The USB installer image
+
+`make installer` (after `make image`) builds `build/rollgate-installer-<date>.img` and its `.sha256` with `image/installer.sh` (ADR 0021): a disk image, not an ISO, written to a USB stick as it is ([install.md](install.md)).
+
+```
+image/installer.sh            the build
+image/installer/packages.txt  the installer's own system (base, linux-lts, the router's firmware, zstd, grub)
+image/installer/rootfs/       its overlay: rollgate-installer.service and the rollgate-overlay initramfs hook
+image/installer/README.txt    the stick's rollgate/README.txt
+```
+
+The stick has an MBR partition table, so Windows and macOS show its first partition (they hide a GPT EFI system partition), and UEFI firmware boots it as removable media:
+1. FAT32, labelled `ROLLGATE`, type `0x0c`: GRUB (`EFI/BOOT/BOOTX64.EFI`, built with an early config that finds this partition by its UUID), the kernel and initramfs, and the `rollgate/` folder where the owner puts `ssh-key.pub` and the installer writes its reports.
+2. squashfs: the installer's system, `pacstrap`ped from the same pinned date as the router, with the router image compressed with zstd and its checksum in `/usr/share/rollgate/`. The initramfs hook `rollgate-overlay` puts a writable layer in memory on top, so the stick is never changed except for the FAT partition's folder.
+
+The partitions are found by PARTUUID (the MBR's random disk signature, made per build), not by label, so another disk can't be mistaken for the stick.
+`rollgate-installer.service` runs `rollgate install -console` on the screen and the serial console; the login prompts there are masked, and tty2 has one (root, no password) for looking around.
+`make test-install` tests it ([testing.md](testing.md)).
 
 ## Our own packages
 

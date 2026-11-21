@@ -15,7 +15,7 @@ CI does the same thing in an `archlinux` container (`.github/workflows/ci.yml`).
 2. Open the Arch shell (`wsl -d archlinux`). It starts as root. Install the tools:
 
    ```
-   pacman -Syu --needed make git rsync openssh arch-install-scripts btrfs-progs dosfstools gptfdisk grub qemu-system-x86 edk2-ovmf shellcheck go staticcheck nftables dnsmasq unbound fakeroot qemu-img
+   pacman -Syu --needed make git rsync openssh arch-install-scripts btrfs-progs dosfstools gptfdisk grub qemu-system-x86 edk2-ovmf shellcheck go staticcheck nftables dnsmasq unbound fakeroot qemu-img squashfs-tools
    ```
 
 3. Put the repository on the **Linux** filesystem, not under `/mnt/c`. Loop devices and Btrfs images on Windows drives are slow or don't work.
