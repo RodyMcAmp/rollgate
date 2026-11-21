@@ -1,0 +1,17 @@
+# Packages in the USB installer's own system (ADR 0021), from the same pinned Arch
+# Linux Archive date as the router image. Stable repos (core, extra) only: ADR 0003.
+# No daemon of its own: rollgate install asks for DHCP with systemd-networkd, part of
+# systemd (in base).
+
+# base has util-linux, iproute2 and pciutils (lspci for hardware.txt).
+base
+mkinitcpio
+linux-lts
+# The router's firmware packages, so the installer sees the same ports it will.
+linux-firmware-intel
+linux-firmware-realtek
+# Unpacks the router image.
+zstd
+dosfstools
+# Builds the stick's boot loader at image build time.
+grub
