@@ -88,6 +88,14 @@ the router's password (ADR 0020):
                            none yet, then run PROGRAM (the getty units run it, with
                            agetty as PROGRAM)
 
+the USB installer (ADR 0021; on the installer stick, not on a router):
+  install [-console] [-image FILE] [-stick DIR]
+                           put rollgate on this computer's internal disk: pick
+                           the disk and the ports, write the image after erase
+                           is typed, and write router.toml, the stick's
+                           ssh-key.pub, install-log.txt and hardware.txt.
+                           -console: talk on the kernel's consoles, then restart
+
 web UI (ADR 0014):
   web-password [--stdin]   set only the web UI's admin password (asked twice, or one
                            line from stdin), make its HTTPS certificate if there
@@ -225,6 +233,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return passwordCmd(args[1:], stdout, stderr)
 	case "firstboot":
 		return firstbootCmd(args[1:], stdout, stderr)
+	case "install":
+		return installCmd(args[1:], stdout, stderr)
 	case "setup":
 		return setupCmd(args[1:], stdout, stderr)
 	case "web-password":
