@@ -1,0 +1,34 @@
+# This router's settings, written by the rollgate installer on {{.Date}} (ADR 0021).
+# The first boot applies them. Change them on the web UI, or edit this file and
+# run "rollgate apply". Every option is explained in docs/config-spec.md.
+schema_version = 1
+
+[system]
+ipv6 = "auto"   # local IPv6 always; IPv6 internet too if your ISP offers it
+
+[management]
+allowed_zones = ["lan"]   # SSH and the web UI only from your home network
+
+# The internet: the port to your modem.
+[[interface]]
+name = "wan"
+match_mac = "{{.WAN.MAC}}"   # {{.WAN.Name}}, {{.WAN.Driver}}{{if .WAN.Addr.IsValid}}; got {{.WAN.Addr}} from the modem{{end}}
+ipv4 = "dhcp"
+
+# Your home network: plug a switch, a Wi-Fi access point or a computer in here.
+[[interface]]
+name = "lan"
+match_mac = "{{.LAN.MAC}}"   # {{.LAN.Name}}, {{.LAN.Driver}}
+ipv4 = "{{.LANAddr}}"
+
+# Devices on the home network get an address from the router.
+[dhcp.lan]
+range = ["{{.Start}}", "{{.End}}"]
+{{- if .Extra}}
+
+# This computer's other ports, unused for now: router.toml can't join several
+# ports into one network yet.
+{{- range .Extra}}
+#   {{.Name}}  {{.MAC}}  {{.Driver}}
+{{- end}}
+{{- end}}
