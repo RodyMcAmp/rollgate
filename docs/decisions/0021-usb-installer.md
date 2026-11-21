@@ -1,6 +1,6 @@
 # 0021. A USB installer that writes the router image and sets up the ports
 
-- Status: Proposed
+- Status: Accepted (by the maintainer, 2026-11-20)
 - Date: 2026-11-20
 
 ## Context
