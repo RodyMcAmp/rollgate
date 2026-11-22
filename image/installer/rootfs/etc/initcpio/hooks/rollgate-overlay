@@ -1,0 +1,16 @@
+#!/usr/bin/ash
+# The USB installer (ADR 0021): the root file system is a read-only squashfs on the
+# stick. Put a writable layer in memory on top of it, so the installer's system can
+# write (/etc, /var) and the stick stays unchanged. Both live under /run/rollgate,
+# which switch_root carries over into the system, so the squashfs stays visible
+# there and rollgate install sees that the stick is in use.
+
+run_latehook() {
+    mkdir -p /run/rollgate/system /run/rollgate/rw
+    mount --move /new_root /run/rollgate/system
+    mount -t tmpfs -o mode=0755 rollgate-rw /run/rollgate/rw
+    mkdir -p /run/rollgate/rw/upper /run/rollgate/rw/work
+    mount -t overlay \
+        -o lowerdir=/run/rollgate/system,upperdir=/run/rollgate/rw/upper,workdir=/run/rollgate/rw/work \
+        rollgate /new_root
+}
